@@ -36,7 +36,7 @@ Every volume picks a tier at creation (immutable per volume in v1):
 
 | Tier | Write path | Durability contract | RPO | For |
 |---|---|---|---|---|
-| **E — ephemeral** | local NVMe only | none past teardown; wiped at teardown | ∞ | U1 agents, U2 builds (the disposable 90%) |
+| **E — ephemeral** | local NVMe only | none past teardown; wiped at teardown (crypto-erase — E-6) | ∞ | U1 agents, U2 builds (the disposable 90%) |
 | **R — replicated-async** | local NVMe, epoch sync to remote envelope | crash-consistent remote checkpoint | ≤ sync interval (default 60 s, tunable 10 s–1 h) | U3 dev envs, **U4 stateful apps (the long-lived default)**, long-running agents worth restarting |
 | **S — synchronous** | write-through to remote envelope (v3 path) | every flush durable on network storage | 0 | control-plane data, databases, anything the tenant declares critical |
 

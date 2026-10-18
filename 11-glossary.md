@@ -33,7 +33,7 @@ In doc 01 (and wherever requirements are restated):
 | **seal** | The operation that produces a checkpoint: quiesce → ship epoch → CRC-verify → record. Sealed = completed successfully. | — |
 | **epoch** | The dirty-block tracking window between two seals (dm-era era). | — |
 | **sync** | Not used in prose (ambiguous). The API call is named `SyncVolume` (FR-33); in prose the operation is a *seal* and the result a *checkpoint*. | — |
-| **wipe** | The operation that removes residual *data* from a local region (NVMe region, memory). | key material (say *zeroize*) |
+| **wipe** | The teardown operation that makes residual *data* unrecoverable. Storage regions: **crypto-erase** — zeroize the DEK, then TRIM/discard; never a physical overwrite (E-6: NAND wear). Memory: unmap/zero pages (SEC-14). | key material (say *zeroize*); physical overwrite (rejected — E-6) |
 | **zeroize** | The destruction of *key material* (DEKs, kernel keyring entries) — includes crypto-erase where the mechanism allows. | data regions (say *wipe*) |
 | **erase** | Not used (superseded by *wipe* / *zeroize*). | — |
 | **attest** | Machine-verified evidence produced at boot (signature chain, sysctl checks) — verified by the platform, not self-declared. | host self-declarations (say *report*) |

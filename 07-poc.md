@@ -1,9 +1,10 @@
 # 07 — PoC Scope (pre-P0)
 
-Working document — v4, 2026-10-18. **v2**: live migration explicitly deferred (v1 goal,
+Working document — v5, 2026-10-18. **v2**: live migration explicitly deferred (v1 goal,
 not PoC scope — E-3). **v3 (E-4)**: PoC re-targeted to **direct Cloud Hypervisor
 orchestration** — no containerd, no Kata. **v4 (E-5)**: PoC host = **Fedora CoreOS,
-stable stream** — the tracked upstream. Defines the **first proof of concept**: the smallest
+stable stream** — the tracked upstream. **v5 (E-6/E-7)**: wipe = crypto-erase only;
+escape suite mapped to hardening controls. Defines the **first proof of concept**: the smallest
 buildable system that validates the riskiest technical bets of the design. Everything not
 listed in scope is **deferred by decision**, not forgotten — see §3.
 
@@ -36,15 +37,18 @@ not after building a control plane around it.
 | Tier-E volume | LUKS2 file on local NVMe, raw sparse inside; **key from a local file** (mock KMS — one JSON file, root-only) | I-2 reduced |
 | Workload spec | image digest + command + volume size. That's all | FR-1 subset |
 | Networking | CLH default (virtio-net, per-VM netns set up by host-agent; no exposure, egress NAT if it works out of the box) | — |
-| Test harness | scripted: boot-time measurement, 20 parallel VMs, 1,000× create/wipe loop, residual-memory probe, 3 public escape PoCs must fail | PERF-1/5/8 subset, SEC-40 seed, doc 01 criteria 2/6/7 |
+| Test harness | scripted: boot-time measurement, 20 parallel VMs, 1,000× create/wipe loop, residual-memory probe, 3 public escape PoCs must fail — **each mapped to the hardening control it validates (E-7)**: virtio-net offload attack (PwnEscape class) → SEC-7/I-7; virtio device-model escape against CLH → SEC-3/4; 2026 page-cache/userns kernel cluster → SEC-11 (+ boot-time sysctl check) | PERF-1/5/8 subset, SEC-40 seed, doc 01 criteria 2/6/7 |
 
 **Success criteria** (all measurable, nothing subjective):
 
 - [ ] Workload create → process running in guest: P50 < 1.5 s (PERF-1)
 - [ ] 20 parallel microVMs stable, < 200 MB RSS each at rest (PERF-5)
 - [ ] Teardown P99 < 2 s; 1,000 create/wipe cycles: no host memory growth, no wedge (PERF-8)
-- [ ] After wipe, the volume's NVMe region contains no recoverable workload data (probe)
-- [ ] The 3 selected escape PoCs all fail
+- [ ] After wipe, the volume's NVMe region contains no **cryptographically recoverable**
+  workload data (probe: DEK zeroized, region TRIMmed — ciphertext bytes may legitimately
+  remain; physical overwrite is rejected, E-6)
+- [ ] The 3 escape PoCs all fail — each validating its hardening control (SEC-7 offload
+  policy; SEC-3/4 frozen device model; SEC-11 kernel hardening — E-7)
 - [ ] Kernel-hardening sysctls verified by script at boot
 
 ## 3. Explicitly deferred (do not build, even if "easy")

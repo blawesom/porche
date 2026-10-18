@@ -75,7 +75,10 @@ tenant (platform enumeration, fingerprinting).
   netns, residual memory) are wiped; the wipe is **reported** in the audit log (host
   self-report — verification is external and proportional: residual-memory probe at PoC,
   randomized spot audits on host release, TPM-backed measurement as a phase-3 option; see
-  doc 08 A-3).
+  doc 08 A-3). **Wipe semantics (E-6)**: storage regions are wiped by **crypto-erase only** —
+  zeroize the volume DEK, then TRIM/discard the region; **physical overwrite is never
+  performed** (NAND wear — operator decision). Memory is wiped by unmap/zero (SEC-14).
+  Verification therefore means "no *cryptographically recoverable* data".
 - **FR-4** — Guaranteed delay between "API accepts" and "process visible inside the guest":
   P50 < 1.5 s, P99 < 5 s (see PERF-1).
 - **FR-5** — Per-tenant quotas: vCPU, RAM, workload count, egress, **local NVMe space**,
