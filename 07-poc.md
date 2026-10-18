@@ -80,6 +80,12 @@ tier E only       KMS v0, CNI, signing             dedicated hosts, zero-trust f
 The PoC is **smaller than P0**: P0 already assumes a (dev-mode) control plane and the full
 acceptance list of doc 01 §8. The PoC exists to earn the right to build P0.
 
+**Alongside the PoC**: the Outscale **integration environment** (doc 13) — bare-metal
+hosts simulated on dedicated-group VMs with nested virtualization. It hosts the A-1 and
+A-9 spikes and the doc-12 protocol work; its fidelity contract (doc 13 §2) keeps every
+performance gate on real metal. The spikes moving there **pulls mechanism validation
+ahead** of the metal timeline without weakening any gate.
+
 ## 5. Estimated effort
 
 - Setup (host, CLH, hardening): days
