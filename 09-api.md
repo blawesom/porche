@@ -70,7 +70,7 @@ owner (or, for platform objects, to platform operators) — view scoping per FR-
 |---|---|
 | Attributes | `id`, `user`, `workload`, `protocol` (tcp/udp), `guest_port`, `external_addr`, `state` (active/revoked), `created_at`, `revoked_at` |
 | CRUD | create (explicit, auditable — FR-20), read (own), update (revoke), delete (revoke) |
-| Notes | first-class v1 (E-2); enforced by the per-host data path (I-14), never by guest cooperation; revocation is immediate and auditable |
+| Notes | first-class v1 (E-2); created/changed/revoked through the control API only — the guest has no path to modify an exposure; enforced by the per-host data path (I-14); revocation is immediate and auditable |
 
 ### Image
 | | |

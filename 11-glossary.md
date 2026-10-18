@@ -44,6 +44,7 @@ In doc 01 (and wherever requirements are restated):
 | **checkpoint migration** | Stop a workload + place it anew + start it (checkpoint-carrying for tiers R/S). The default mechanism, all tiers. | live migration |
 | **live migration** | VMM-level transfer of a running workload; the guest sees only the cutover pause. Stateful workloads — v1 goal (E-3). | checkpoint migration |
 | **cutover** | The user-visible downtime window of one migration (for live migration: the pause at switchover). | — |
+| **exposure** | The API object that grants inbound access to one workload port (doc 09). Created and revoked through the control API only — never from the guest. | guest-initiated port opening, firewall-rule edits from inside the workload |
 | **allocation** | The binding of one host to one user (SEC-16; doc 05). | — |
 | **tier** | Volume durability: E / R / S (doc 04). Nothing else is a tier. | performance level, storage location |
 | **class** | Storage location/cost of a remote copy: hot / cold (doc 04 §2.2). | durability (say *tier*) |

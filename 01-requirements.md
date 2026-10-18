@@ -109,6 +109,9 @@ tenant (platform enumeration, fingerprinting).
   workload allow-list); **no ingress by default**, but ingress exposure is a **first-class
   v1 capability** (E-2): every exposure is an explicit, auditable, revocable API object
   (doc 09 — Exposure), enforced by the per-host data path, never by guest cooperation.
+  Exposures are created, changed, and revoked **through the control API only** — the guest
+  has no path to open, alter, or close one (a compromised workload cannot widen its own
+  ingress surface).
 - **FR-21** — Strict L2 isolation between workloads (netns per VM, no bridge shared between
   tenants); verifiable by test (see SEC-30).
 - **FR-22** — Per-workload egress bandwidth cap (token bucket); the cap is enforced by the
