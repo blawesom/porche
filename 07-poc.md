@@ -66,7 +66,7 @@ not after building a control plane around it.
 | CI attack suite beyond the 3 PoCs | the 3 prove the harness works; coverage grows with the fleet |
 | CNI networking, egress proxy, ingress model | host-agent/CLH defaults suffice to measure boot/isolation |
 | GPU (VFIO/MIG), CMK, cross-DC, HA everything | phase 2+ per doc 02 §7 |
-| **Live migration (E-3, A-9/E-4)** | v1 goal, **not PoC scope**: needs a second host. The runtime question is settled (direct CLH) — the post-PoC spike validates CLH migration under load (PERF-13) on the PoC stack itself |
+| **Live migration (E-3, A-9/E-4; P1 stretch per E-15)** | **not PoC scope**: needs a second host. The runtime question is settled (direct CLH) — the post-PoC spike validates CLH migration under load (PERF-13) on the PoC stack itself |
 | dm-thin clone-at-create, snapshot-resume fast boot (borrowings) | perf optimizations on top of a working baseline |
 
 ## 4. Position in the roadmap

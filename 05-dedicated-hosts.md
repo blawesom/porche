@@ -61,7 +61,7 @@ the user's own business, but *nothing about other users or the global fleet* is 
 
 | Call | Returns |
 |---|---|
-| `ListAvailableHosts` | free hosts allocatable by the caller: hardware profile (CPU/RAM/NVMe size+class, GPU), HostGroup, price/host-hour — the provisioning catalog (scoped: no other users' information, no fleet totals) |
+| `ListAvailableHosts` | free hosts allocatable by the caller: hardware profile (CPU/RAM/NVMe size+class, GPU), HostGroup, `cost_index`/host-hour (internal showback, E-15) — the provisioning catalog (scoped: no other users' information, no fleet totals) |
 | `ListHosts` | the user's hosts: state, group, hardware profile, current load, allocated capacity |
 | `GetPlacement` | per host: the workloads running there (id, tier, resources, affinity tags); per workload: its host |
 | `GetDistribution` | aggregate view: per group/host — workload count, vCPU/RAM/NVMe usage, per-tier breakdown |
@@ -151,9 +151,11 @@ per-allocation problems — smaller lock domains in PostgreSQL than the legacy f
 
 ## 6. Metering & billing hooks
 
-Feeds FR-42: host-hours per allocation (the unit of dedicated-host billing), plus per-host
-utilization so the user sees packing efficiency of their own allocation (idle-host cost is
-*their* cost signal for the §3 spread decisions — spreading has a visible price).
+Feeds FR-42: host-hours per allocation (the unit of dedicated-host accounting), plus
+per-host utilization so the user sees packing efficiency of their own allocation
+(idle-host cost is *their* cost signal for the §3 spread decisions — spreading has a
+visible price). **Metering is internal showback** (E-15): host-hours is an accounting
+unit, not an invoice line — no customer-facing chargeback exists.
 
 ---
 
@@ -169,8 +171,8 @@ host administration (B-1 resolution, doc 08).
 
 ### 7.1 Workload migration (the flexibility primitive)
 
-Migration = **checkpoint migration** (all tiers) or **live migration** (long-lived
-stateful workloads — v1 goal, E-3; gated on the runtime selection, doc 08 A-9). No QMP
+Migration = **checkpoint migration** (all tiers — the P1 must) or **live migration**
+(long-lived stateful workloads — P1 stretch, E-3/E-15; gated on the A-9 two-host spike). No QMP
 block jobs in either path. Both available at will (drain, rebalance, user-initiated,
 upgrade-driven):
 
@@ -213,7 +215,7 @@ attestation remains the open question, doc 02 §8).
 ## 8. Open questions
 
 - [ ] ~~May a user's allocation span hosts whose hardware profiles differ~~ — resolved:
-  yes, via `ListAvailableHosts` (hardware profile, group, price per host); a user may hold
+  yes, via `ListAvailableHosts` (hardware profile, group, `cost_index` per host); a user may hold
   heterogeneous allocations (e.g., a GPU rack group + a compute group).
 - [ ] Reservations: pre-allocate capacity for a group ("keep 2 hosts free for `web`
       failover") — is this a tag, a quota, or a group-level policy?

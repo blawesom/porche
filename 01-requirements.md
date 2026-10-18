@@ -9,6 +9,9 @@ Kata and containerd are dropped from the data plane (CT-5).
 plane / workload data plane.
 **v5** (doc 08 E-9): FR-5 TTL re-scoped to per-workload-class policy (operator-waivable
 for stateful U4).
+**v6** (doc 08 E-15): E-3 re-tiered — checkpoint migration is the P1 must, live
+migration a P1 stretch with a predefined fallback trigger (A-9 spike); metering is
+internal showback (no customer-facing chargeback); OPS-2 restated.
 
 **Conventions (RFC 2119, doc 11 §1)**: every FR/SEC/PERF/OPS statement is **MUST** —
 normative, violation is a defect — unless explicitly marked **SHOULD** (deviation requires
@@ -37,7 +40,8 @@ tenant (platform enumeration, fingerprinting).
   **runs isolated workloads** on them (microVMs, container-compatible API).
 - A platform where **stateful workloads are first-class citizens** (E-1): long-lived enterprise
   applications (databases, app servers, queues) run on persistent tier R/S volumes, serve
-  ingress, and are **live-migratable** (v1 goal, E-3) for non-disruptive maintenance.
+  ingress, and are **live-migratable** (P1 stretch, gated on the A-9 spike — checkpoint
+  migration is the P1 must; E-3/E-15) for non-disruptive maintenance.
 - Two control planes and a workload data plane (E-8): the **admin control plane** (host
   fleet lifecycle, version registry, image pipeline, monitoring — operators only) and the
   **tenant control plane** (workload/volume/network-rule orchestration, placement views, quotas,
@@ -48,12 +52,14 @@ tenant (platform enumeration, fingerprinting).
 ### 1.2 What PORCHE is not (non-goals)
 
 - **Not a general-purpose public IaaS** — no commercial multi-region, no heterogeneous instance
-  catalog, no customer billing.
+  catalog, no customer billing; **no customer-facing chargeback** — metering (FR-42) is
+  internal showback, a cost *signal* for placement decisions (E-15).
 - **Not Kubernetes** — no dependency on the K8s ecosystem (but OCI image compatibility).
 - **No heterogeneous guest OSes** (category 5) in v1 — Windows is out of scope
-  (re-evaluation possible in phase 3+). **Live migration is in scope as a v1 goal** (E-3):
-  it applies to microVMs and does not require category-5 VMs. It is gated on the v1 runtime
-  selection (doc 08 A-9), not deferred to phase 3+.
+  (re-evaluation possible in phase 3+). **Live migration is in scope** (E-3, tiered by
+  E-15): it applies to microVMs and does not require category-5 VMs. It is a **P1
+  stretch**, gated on the A-9 two-host spike (doc 08); **checkpoint migration is the P1
+  must** and stands regardless of the spike outcome. Not deferred to phase 3+.
 - **No trust in the workload** — no feature may depend on the goodwill of executed code
   (a "cooperative agent" is never the only control).
 
@@ -118,7 +124,7 @@ tenant (platform enumeration, fingerprinting).
   workload-per-host distribution, per-group aggregates, placement decisions with reasons
   (incl. pending causes), and a resilience report (replica spread, single points of failure).
   Nothing about other users or the global fleet is exposed. Provisioning catalog
-  (`ListAvailableHosts`: hardware profile, group, price) is likewise scoped.
+  (`ListAvailableHosts`: hardware profile, group, `cost_index` — internal showback, E-15) is likewise scoped.
 
 ### 3.3 Networking
 
@@ -169,10 +175,11 @@ tenant (platform enumeration, fingerprinting).
   "latest + N" with background compaction — no user-visible backing chains.
 - **FR-34** — **Workload migration**, two primitives, both available at will (drain,
   rebalance, user-initiated): **checkpoint migration** (tier R/S: seal → restore on target;
-  tier E: terminate + reschedule) and **live migration** for long-lived stateful workloads
-  (v1 goal, E-3 — near-zero-cutover VMM-level transfer; gated on the runtime selection,
-  doc 08 A-9). Targets always within the same user's allocation; affinity honored
-  (doc 05 §7.1).
+  tier E: terminate + reschedule) — **the P1 must** — and **live migration** for
+  long-lived stateful workloads (P1 stretch, E-3/E-15 — near-zero-cutover VMM-level
+  transfer; **fallback trigger**: if the A-9 two-host spike does not demonstrate PERF-13
+  by end of P1, this primitive moves to P2; checkpoint migration stands regardless).
+  Targets always within the same user's allocation; affinity honored (doc 05 §7.1).
 - **FR-35** — **Rolling upgrades, user-action-free**: platform-initiated host reimage in
   canary rings with version gates and drain concurrency limits per user (doc 05 §7.2).
 
@@ -187,9 +194,10 @@ tenant (platform enumeration, fingerprinting).
   IMDSv1-style).
 - **FR-42** — Metering: per workload and per tenant, across **storage tiers and classes**
   (local-NVMe GB·s, hot/cold GB·month, epoch-ship bytes, seals) plus vCPU/RAM/GPU-hours and
-  **host-hours per allocation** (dedicated-host billing unit), with per-host utilization
+  **host-hours per allocation** (dedicated-host accounting unit), with per-host utilization
   (the user's cost signal for spread-vs-packing decisions) — tier and placement choices
-  must be informed cost decisions.
+  must be informed cost decisions. Metering is **internal showback** (cost signal only);
+  it is not a billing system (E-15).
 - **FR-43** — Observability: per-host and per-workload metrics (CPU, RAM, I/O, network, boot
   time), centralized logs, alerts (including security alerts, see OPS-10).
 - **FR-44** — Bare metal fleet management: hardware inventory, immutable OS provisioning
@@ -340,8 +348,9 @@ blocks the release.
 - **OPS-2** — Host failure: ephemeral workloads are terminated and reschedulable; stateful
   ones (U3/U4) survive on tier R/S storage and are restartable (RTO < 10 min). **Host
   maintenance is non-disruptive for stateful workloads**: drain migrates them live
-  (v1 goal, E-3) or by checkpoint — platform-initiated action never requires terminating a
-  user's long-lived workload (doc 05 §7.2).
+  (P1 stretch, E-3/E-15) or by checkpoint (P1 must) — platform-initiated action never
+  **terminates** a user's long-lived workload; a bounded I/O pause is acceptable
+  (doc 05 §7.2).
 - **OPS-3** — Data-plane updates (kernel, VMM, runtime) without full downtime: rolling drain
   (see FR-12).
 - **OPS-4** — A workload cannot degrade its host beyond its quotas (CPU, RAM, I/O, fds,

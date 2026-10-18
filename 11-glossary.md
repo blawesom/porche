@@ -42,7 +42,7 @@ In doc 01 (and wherever requirements are restated):
 | **reimage** | Replace the host artifact by writing the spare A/B slot and booting into it (doc 10). | any in-place update (never used — image is immutable) |
 | **migration** | Move a workload to another host within the owner's allocation. Two mechanisms: *checkpoint migration* and *live migration*. | — |
 | **checkpoint migration** | Stop a workload + place it anew + start it (checkpoint-carrying for tiers R/S). The default mechanism, all tiers. | live migration |
-| **live migration** | VMM-level transfer of a running workload; the guest sees only the cutover pause. Stateful workloads — v1 goal (E-3). | checkpoint migration |
+| **live migration** | VMM-level transfer of a running workload; the guest sees only the cutover pause. Stateful workloads — P1 stretch (E-3, E-15; checkpoint migration is the P1 must). | checkpoint migration |
 | **cutover** | The user-visible downtime window of one migration (for live migration: the pause at switchover). | — |
 | **ingress rule** | The API object that allows inbound access to one workload port from a source range (doc 09 — IngressRule). Created and revoked through the control API only — never from the guest. | guest-initiated port opening, firewall edits from inside the workload |
 | **egress rule** | The API object that allows outbound internet access to one destination — FQDN or CIDR (doc 09 — EgressRule). Enforced by the egress proxy, DNS included. | intra-VPC rules (say *security group*) |

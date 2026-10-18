@@ -92,7 +92,8 @@ rejoined ◄──(soak ok)── attesting ◄──(boot into new slot)── 
 
 ## 5. Workload migration mechanics (the primitive behind drain, rebalance, user moves)
 
-Migration has two primitives (E-3, v1 goal). **Checkpoint migration**: stop the workload,
+Migration has two primitives (E-3, tiered by E-15: checkpoint = P1 must, live = P1
+stretch). **Checkpoint migration**: stop the workload,
 place it anew, start it. The checkpoint preserves the data. **Live migration** (stateful
 workloads): transfer the VMM to the target host, then cut over. Pause the guest only at
 cutover. Elevate a tier-R volume to write-through for the migration window (doc 02 §4.5).

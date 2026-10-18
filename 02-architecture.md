@@ -251,7 +251,8 @@ having no channel to attack.
 
 ### 4.6 Live migration (E-3; mechanism resolved by E-4)
 
-Live migration is a **v1 goal** (FR-34, PERF-13), not PoC scope (doc 07 §3). **E-4
+Live migration is a **P1 stretch** (FR-34, PERF-13; tiered by E-15 — checkpoint
+migration is the P1 must), not PoC scope (doc 07 §3). **E-4
 resolves the mechanism: CLH's native live migration** — TLS transport between hosts,
 documented n-2 version compatibility (fleet-upgrade friendly, doc 10 rings).
 
@@ -373,10 +374,21 @@ column is what the new orchestrator does instead. Nothing is reused as software.
 
 ## 7. Phasing
 
+**P1 definition of done — top 3** (E-15 decision anchor; when priorities collide, the
+lower-numbered outcome wins, and no requirement outside the top-3 blocks a P1 exit):
+
+1. A U4 stateful workload survives platform-initiated host maintenance with **no tenant
+   action** and no data loss beyond RPO (checkpoint migration, the P1 must; live
+   migration if the A-9 gate passes).
+2. The security floor holds under CI: **SEC-40** attack suite at 0 bypass on the P1
+   stack; **SEC-11** boot-time hardening verification blocking non-compliant hosts from
+   the pool.
+3. The cold-start + teardown budget is met **on metal**: PERF-1/5/8/9.
+
 | Phase | Scope | Exit criteria |
 |---|---|---|
 | P0 | 1 host, control plane v0 (new build), host-agent + CLH (direct, E-4), one encrypted volume round-trip (create→attach→write→detach) | doc 01 acceptance criteria 1–7 |
-| P1 | Full create-instance flow on the new path; storage worker (clone) under encryption; KMS in HA; CNI networking; ingress data path (per-host proxy, E-2); **live-migration two-host spike on the direct-CLH stack (A-9, E-4)** | PERF-1/5/8/9 met; F42-fix PoC (no guest-controlled channel exists to attack); F0.1-fix PoC (metadata without token fails); PERF-13 evidenced on the spike |
+| P1 | Full create-instance flow on the new path; storage worker (clone) under encryption; KMS in HA; CNI networking; ingress data path (per-host proxy, E-2); **live-migration two-host spike on the direct-CLH stack (A-9, E-4)** | PERF-1/5/8/9 met; F42-fix PoC (no guest-controlled channel exists to attack); F0.1-fix PoC (metadata without token fails); PERF-13 evidenced on the spike — else **E-15 fallback**: live migration moves to P2, checkpoint migration stands |
 | P2 | GPU (VFIO/MIG via CLH hotplug), runtime volume attach/detach (hotplug), live migration GA (PERF-13), CMK option for tenants | GPU PoC on A100; PERF-13 met; CMK wrap hierarchy reviewed |
 | P3 | HA hardening, fleet version-registry enforcement, CI attack suite at full coverage | I-5 gate enforced (deploys blocked on EOL/CVE) |
 

@@ -119,7 +119,8 @@ host is upstream, fuzzed, and disposable-per-workload.**
 ## 4. Tradeoffs accepted
 
 1. **No QMP block jobs, no pause-and-inspect** — gone with QMP, permanently. **Live
-   migration is in scope as a v1 goal** (E-3, doc 08), but by a different mechanism
+   migration is in scope as a P1 stretch** (E-3, E-15, doc 08 — checkpoint migration is
+   the P1 must), but by a different mechanism
    (VMM-level transfer, FR-34) — never by re-introducing QMP machinery. Consequence: the
    C-1/C-2 deletions stand unconditionally for the *ephemeral* workload class; for
    *stateful* workloads, the v1 runtime selection (A-9 gate, doc 02 §4.5) decides whether

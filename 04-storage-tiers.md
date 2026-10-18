@@ -47,7 +47,7 @@ Restore semantics:
   (crash-consistency, see §3).
 - **S** — v3 behavior; restart anywhere, no data loss on host loss.
 
-**Live migration** (v1 goal, E-3): clean only when the volume is network-attached at
+**Live migration** (P1 stretch, E-3/E-15; checkpoint migration is the P1 must): clean only when the volume is network-attached at
 cutover — tier S by construction; tier R is **elevated to write-through (S semantics) for
 the migration window**, then demoted. The sealable tier-R stack (§3.1, A-1 spike) is a
 prerequisite for that elevation. Tier E stays on checkpoint migration (ephemeral by

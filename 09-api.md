@@ -35,7 +35,7 @@ operator-owned mutations where relevant.
 | | |
 |---|---|
 | Attributes | `id`, `hardware_profile` (CPU, RAM, NVMe size/class, GPU), `group` (ref), `state` (free/allocated/draining/maintenance/decommissioned), `version` (signed image digest, attestation result), `load` (live) |
-| CRUD | read (own via Allocation; free hosts via `ListAvailableHosts` — profile, group, price only), update (operator: state), create/delete = fleet ops, not API CRUD |
+| CRUD | read (own via Allocation; free hosts via `ListAvailableHosts` — profile, group, `cost_index` only — internal showback unit, E-15, not a customer price), update (operator: state), create/delete = fleet ops, not API CRUD |
 | Notes | lifecycle owned by platform operator (doc 05 §7); users never mutate hosts |
 
 ### Allocation

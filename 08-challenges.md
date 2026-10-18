@@ -13,7 +13,10 @@ mapped to hardening controls). **v6**: E-8 — three-plane separation. **v7**: E
 **v8**: E-11 — Outscale integration environment (doc 13 opened). **v9**: E-12 —
 workload networking specified (doc 14 opened; C-6 superseded, F45 question closed).
 **v10**: E-13 — user-defined workload address ranges (FR-23). **v11**: E-14 — network-rule
-objects: IngressRule (renamed from Exposure), EgressRule, SecurityGroup.
+objects: IngressRule (renamed from Exposure), EgressRule, SecurityGroup. **v12**: E-15 — P1
+scope gates (live migration tiered: checkpoint = P1 must, live = P1 stretch with predefined
+fallback; A-5 re-gated to GA with dev-mode KEK for P0/P1) and metering semantics
+(internal showback, no chargeback).
 
 ---
 
@@ -69,13 +72,17 @@ scheduling concern, not a security boundary: the storage role (same binary, I-13
 on any platform node with NFS access + KMS reachability. Legacy filer agents are not
 part of the new storage path.
 
-### A-5. KMS KEK loss = total data loss [open — must close before P1]
+### A-5. KMS KEK loss = total data loss [re-gated by E-15 — dev-mode KEK for P0/P1, HSM/quorum is the GA gate]
 
 Every volume DEK is wrapped under a KEK that "lives solely in the KMS". Destroy the KEK
 and *all* tenant data is unreadable — forever. There is no key ceremony, no KEK backup
 (e.g., Shamir split, offline copies), no recovery runbook in the corpus. This is the
-single largest unrecoverable-failure mode in the design. **Action required**: key ceremony
-+ KEK backup procedure as a P1 entry criterion.
+single largest unrecoverable-failure mode in the design.
+
+**Re-gate (2026-10-18, E-15)**: a **labeled dev-mode KEK** (software, single-node,
+non-production) is permitted in P0/P1 so the trust-anchor schedule no longer blocks the
+mechanism work; **HSM/quorum + key ceremony + KEK backup are the GA gate**. The invariant
+is unchanged in both modes: the KEK never enters Postgres.
 
 ### A-6. Kata dependency risk is real and recent [closed by E-4 — Kata dropped from the data plane]
 
@@ -196,6 +203,14 @@ Upstream watch item retained: if Kata ever ships sandbox live migration for CLH,
 single-runtime choice is re-evaluated per the doc 11 §4 comparison rule — the design must
 not grow dependencies that make that re-entry harder.
 
+**Tiering (2026-10-18, E-15)**: "v1 goal" is re-tiered into **P1 must** (checkpoint
+migration, FR-34/PERF-12 — the guarantee that platform-initiated maintenance never
+*terminates* a stateful workload; a bounded I/O pause is acceptable) and **P1 stretch**
+(live migration, PERF-13, owned by this spike). **Fallback trigger (premade, not
+mid-P1)**: if the spike does not demonstrate PERF-13 (P99 cutover < 1 s, convergence
+under sustained dirty rate ≤ 250 MB/s) by the end of P1, live migration moves to P2 —
+design unchanged, schedule only.
+
 ## B. Gaps in objectives
 
 ### B-1. No operating model [RESOLVED — per operator decision]
@@ -230,7 +245,8 @@ Token, Quota) — deliberately attribute-level, not full OpenAPI, until P0 feedb
 ### B-4. No DR/backup story for control-plane state [partially resolved]
 
 Postgres backup + audit Merkle-head continuity noted as P1 scope; the KEK ceremony
-(A-5) remains the critical item and the P1 entry criterion.
+(A-5) remains the critical item — re-gated by E-15 to the **GA gate** (dev-mode KEK
+authorized for P0/P1).
 
 ## C. What survives challenge (explicitly)
 
@@ -247,7 +263,7 @@ Postgres backup + audit Merkle-head continuity noted as P1 scope; the KEK ceremo
 | 1 | Tier-R dm-composition spike (A-1) | before P1 (gate) |
 | 2 | ~~Resolve volume attach model (A-2)~~ | **resolved — dissolved by E-4** (CLH native block attach) |
 | 3 | Storage worker placement decision (A-4) | before P1 |
-| 4 | Key ceremony + KEK backup procedure (A-5) | P1 entry criterion |
+| 4 | Key ceremony + KEK backup procedure (A-5) | **GA gate** (E-15; dev-mode KEK authorized for P0/P1) |
 | 5 | Manager HA verification (A-8) | before claiming OPS-1 |
 | 6 | Operating model: users, staffing, SLA owners (B-1) | before P1 |
 | 7 | API specification (B-3) | before P0 control plane |
@@ -278,3 +294,4 @@ Postgres backup + audit Merkle-head continuity noted as P1 scope; the KEK ceremo
 | E-12 | 2026-10-18 | **Workload networking design** (doc 14): **native netns/veth — CNI superseded** (it standardized container-runtime integration that E-4 deleted); **no VLANs in the workload path** — F45 class closed by not using VLANs; one bridge per host (per user, SEC-16) with **isolated ports** — no workload↔workload L2; CLH jailed inside the per-workload netns; **routed /32 per workload, no overlay** (BGP behind the route-table seam); guest IP on the kernel command line — no DHCP, no guest cooperation; egress = transparent per-host proxy (name-level allow-list, NAT, token bucket); ingress = per-host proxy as the **sole** Exposure enforcement point (no DNAT bypass); anti-spoof and security groups compiled to netns nftables; **vhost-net off in v1**; migration cutover = atomic route switch + listener move | doc 14 (opened), doc 03 §6 (C-6 line amended), doc 02 §8 (F45 item resolved) |
 | E-13 | 2026-10-18 | **User-defined workload address ranges**: tenants may define the RFC1918 range (/24–/16) from which their workloads' /32s are assigned — enterprise migration need (U4). Constraints: **fleet-wide uniqueness enforced transactionally** (all users' ranges + platform-reserved fabric/storage/link-local; machine-readable rejection reasons); platform-allocated default when unspecified; users see only their own ranges (FR-14 — a CIDR choice is not a probe). **Allocation-policy change only** — data path, routing, proxies, reachability identical (FR-20/21 unchanged). VPC API object added | doc 01 FR-23, doc 09 (Vpc object), doc 14 §3 (address-range policy) |
 | E-14 | 2026-10-18 | **Network-rule objects** (operator: "lets simplify: egressRule, ingressRule, securitygroup"): **Exposure renamed IngressRule** (+ `source_cidrs` allow-list field — a revoked rule means no listener exists); **EgressRule** added (per-workload or VPC default, FQDN/CIDR; proxy resolves DNS — name rules cannot be bypassed by IP); **SecurityGroup** added (east-west within the VPC, compiled to netns nftables, default deny; attachment immutable per workload in v1). **NetworkPolicy rejected**: K8s label-selector semantics we do not have, and "not Kubernetes" is a non-goal (doc 01 §1.2); SecurityGroup is the IaaS-industry term and the model the corpus already adopted (doc 02 §1). Three rule types, three directions, one mental model | doc 09 (three objects; Exposure renamed), doc 01 FR-20/FR-40, doc 11 (glossary terms), doc 14 §4/§5/§6, doc 02 (I-14, §3.1), doc 12 §1 |
+| E-15 | 2026-10-18 | **P1 scope gates + metering semantics**: (1) **E-3 re-tiered** — checkpoint migration (FR-34, PERF-12) is the **P1 must** for non-disruptive U4 maintenance; live migration (PERF-13) is a **P1 stretch** owned by the A-9 two-host spike; **fallback trigger**: no PERF-13 demonstration (P99 cutover < 1 s, convergence ≤ 250 MB/s dirty) by end of P1 ⇒ live migration moves to P2 (design unchanged, schedule only); OPS-2 restated as "platform-initiated maintenance never *terminates* a stateful workload; bounded I/O pause is acceptable". (2) **A-5 re-gated** — labeled dev-mode KEK (software, single-node) authorized for P0/P1; HSM/quorum + key ceremony + KEK backup remain the **GA gate**; the KEK never enters Postgres in either mode. (3) **Metering is showback** — FR-42's cost signal is internal (placement decisions, packing efficiency); **no customer-facing chargeback** (doc 01 §1.2); doc 09 `price` renamed `cost_index` | doc 01 (v6 header, §1.1/§1.2, FR-34, FR-42, OPS-2), doc 02 §4.6/§7 (P1 definition of done), doc 05 §6, doc 09 (Host/`ListAvailableHosts`) |
