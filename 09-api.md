@@ -1,8 +1,9 @@
 # 09 — API: Object Catalog (CRUD + Main Attributes)
 
-Working document — v1, 2026-10-17. Resolves challenge B-3 (doc 08): the PORCHE API
+Working document — v2, 2026-10-18. Resolves challenge B-3 (doc 08): the PORCHE API
 specified as **objects with CRUD and main attributes** — deliberately at attribute level,
-not full OpenAPI, until P0 feedback. Fills out FR-40.
+not full OpenAPI, until P0 feedback. Fills out FR-40. **v2**: Exposure object added
+(ingress first-class v1 — E-2).
 
 Transport: HTTPS REST + gRPC mirror; AuthN per SEC-20 (short-lived tokens, rotation);
 every call audit-logged (SEC-23). Scope: every object and attribute is visible only to its
@@ -48,7 +49,7 @@ owner (or, for platform objects, to platform operators) — view scoping per FR-
 ### Workload
 | | |
 |---|---|
-| Attributes | `id`, `user`, `image` (digest), `command`, `volumes` (refs), `vcpu`, `ram`, `affinity_tags`, `ttl`, `state` (pending/scheduled/starting/running/stopped/failed/reaped), `placement` (host, reason — incl. pending cause), `console_ref`, `events` |
+| Attributes | `id`, `user`, `image` (digest), `command`, `volumes` (refs), `vcpu`, `ram`, `affinity_tags`, `ttl`, `state` (pending/scheduled/starting/running/stopped/failed/reaped), `placement` (host, reason — incl. pending cause), `exposures` (refs), `console_ref`, `events` |
 | CRUD | create (FR-1), read (own, incl. `GetPlacementDecisions`, `GetResilienceReport` projections), update (limited: stop/start, migrate — FR-34, re-tag), delete (deterministic teardown FR-3) |
 
 ### Volume
@@ -62,6 +63,14 @@ owner (or, for platform objects, to platform operators) — view scoping per FR-
 |---|---|
 | Attributes | `id`, `volume`, `sealed_at`, `epoch`, `size`, `class` (hot/cold), `retention` |
 | CRUD | create (`SyncVolume` — FR-33, opt-in app-consistent), read (list, own), update (retention), delete (release) |
+
+### Exposure
+
+| | |
+|---|---|
+| Attributes | `id`, `user`, `workload`, `protocol` (tcp/udp), `guest_port`, `external_addr`, `state` (active/revoked), `created_at`, `revoked_at` |
+| CRUD | create (explicit, auditable — FR-20), read (own), update (revoke), delete (revoke) |
+| Notes | first-class v1 (E-2); enforced by the per-host data path (I-14), never by guest cooperation; revocation is immediate and auditable |
 
 ### Image
 | | |

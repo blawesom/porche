@@ -1,6 +1,7 @@
 # 05 — Dedicated Hosts, User Placement Views, Attract/Repulse Resiliency
 
-Working document — v1, 2026-10-17. Adds the hosting model to `02-architecture.md`:
+Working document — v2, 2026-10-18. **v2**: §7.1 adds live migration as a v1 goal (E-3,
+doc 08 A-9). Adds the hosting model to `02-architecture.md`:
 
 1. **A bare metal host is allocated to exactly one user** (dedicated hosts).
 2. **The user has a view on their hosts and the VM/workload distribution across them.**
@@ -168,14 +169,16 @@ host administration (B-1 resolution, doc 08).
 
 ### 7.1 Workload migration (the flexibility primitive)
 
-There is **no live migration** (dropped with QMP). Migration = **checkpoint migration**,
-available at will (drain, rebalance, user-initiated, upgrade-driven):
+Migration = **checkpoint migration** (all tiers) or **live migration** (long-lived
+stateful workloads — v1 goal, E-3; gated on the runtime selection, doc 08 A-9). No QMP
+block jobs in either path. Both available at will (drain, rebalance, user-initiated,
+upgrade-driven):
 
-| Tier | Migration | Downtime |
-|---|---|---|
-| E | terminate + reschedule from image | a cold start (by design — ephemeral) |
-| R | seal checkpoint (optional app-consistent `fsfreeze`) → restore on target host → cutover | seal + ship dirty set + restore (PERF-12) |
-| S | same as R; the envelope is always current, restore is immediate | ≈ cold start |
+| Tier | Checkpoint migration | Live migration (stateful, E-3) | Downtime |
+|---|---|---|---|
+| E | terminate + reschedule from image | not applicable (ephemeral by choice) | a cold start (by design) |
+| R | seal checkpoint (optional app-consistent `fsfreeze`) → restore on target host → cutover | elevate to write-through for the window (doc 04 §2) → VMM transfer → cutover | checkpoint: seal + ship dirty set + restore (PERF-12); live: cutover pause (PERF-13) |
+| S | same as R; the envelope is always current, restore is immediate | preferred path — volumes already network-attached | live: ≈ cutover pause |
 
 **Hard constraint (SEC-16)**: the migration target must be **within the same user's
 allocation** — migration never crosses the allocation boundary; checkpoint data stays

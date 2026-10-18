@@ -1,6 +1,8 @@
 # 02 — Core Architecture Design (new orchestrator, incumbent design as reference)
 
-Working document — v3, 2026-10-17. Implements `01-requirements.md`.
+Working document — v4, 2026-10-18. Implements `01-requirements.md`.
+**v4 scope change** (doc 08 E-1..E-3): stateful workloads and ingress first-class v1;
+live migration is a v1 goal — runtime selection re-opened (§4.5, doc 08 A-9).
 Simplification rationale: `03-simplification.md` (C-1..C-6 applied here).
 Storage durability tiers (local NVMe write-back + epoch sync, checkpoint semantics): `04-storage-tiers.md`.
 Dedicated host allocation, user placement views, attract/repulse resiliency: `05-dedicated-hosts.md`.
@@ -10,11 +12,15 @@ platform's design (summary and known weaknesses in doc 06 §4) is **reference an
 inspiration — we adopt design concepts, not software**. There is no legacy code to keep,
 extend, or migrate. **Software architecture, languages, and concrete control-plane
 middleware are not specified in this corpus** — they are a later specification; CT-2 in
-doc 01 remains guidance for that spec. What *is* fixed here: the data-plane technology
-choices and the security/performance model. The incumbent design is improved by:
+doc 01 remains guidance for that spec. What *is* fixed here: the security/performance
+model and the microVM isolation model; the **concrete runtime stack (currently Kata + CLH)
+is a v1 selection, not a commitment** — live-migration capability is a selection criterion
+(E-3, doc 08 A-9). The incumbent design is improved by:
 
 1. **Kata Containers + Cloud Hypervisor as the base VM runtime** (instead of the
    incumbent's per-VM QEMU execution path) — decision traceable to doc 06 §5, F43, F45.
+   **Current default, not definitive** (E-3): the live-migration requirement re-opens the
+   selection — §4.5, doc 08 A-9.
 2. **Default block encryption** — every volume encrypted at rest by default (the
    incumbent stored plaintext volumes on NFS, replicated to a backup DC).
 
@@ -68,7 +74,7 @@ Each improvement is traceable to a requirement (doc 01) and a root cause (assess
 | I-11 | **Outbound-only host-agent** (fuse pattern): hosts dial the control plane over mTLS, zero inbound ports on hosts — the inter-host fabric is hostile and no control relies on it | inbound-facing host agents | SEC-20; zero-trust fabric (doc 02 §8 discussion) |
 | I-12 | **Desired-state reconciliation** (flintlock pattern): host-agent converges to a desired-state table, not push-only orders — replaces missed-order/rejoin/drift machinery | fire-and-forget push orders | OPS-2/3, FR-12 |
 | I-13 | **One binary, multiple roles** (E2B pattern): host-agent, storage worker, build worker = subcommands of one audited binary | separate services per role | CT-3, SEC-30 |
-| I-14 | **Standing rules**: workload traffic never transits the control plane (future ingress = per-host proxy); every artifact pinned by digest (kernel, runtime, images) in the version registry | control-plane-relayed data path; floating tags | SEC-30/31, FR-20 |
+| I-14 | **Standing rules**: workload traffic never transits the control plane (ingress = per-host proxy, **first-class v1** — E-2, Exposure object in doc 09); every artifact pinned by digest (kernel, runtime, images) in the version registry | control-plane-relayed data path; floating tags | SEC-30/31, FR-20 |
 
 ---
 
@@ -117,7 +123,7 @@ Each improvement is traceable to a requirement (doc 01) and a root cause (assess
 |---|---|
 | the hypervisor agent forks a per-VM VMM driver process (one per VM) | host-agent talks **CRI to containerd** — no per-VM fork of our own (C-1) |
 | the per-VM driver forks QEMU, drives it over a QMP unix socket | containerd starts the **kata shim** (one per sandbox) → **Cloud Hypervisor** VMM |
-| the per-VM driver implements snapshot/migrate/hotplug via QMP block ops | dropped (no snapshots/migration); volumes attach at create via CRI/direct assignment |
+| the per-VM driver implements snapshot/migrate/hotplug via QMP block ops | dropped **with QMP** — migration re-enters as a v1 requirement by different mechanisms (FR-34: checkpoint migration + live migration, §4.5); volumes attach at create via CRI/direct assignment |
 | QEMU device model (full) | CLH minimal device model, frozen by policy (SEC-3/4) |
 
 The per-sandbox supervision property the incumbent design got from its per-VM driver now comes from the
@@ -132,8 +138,9 @@ empty (SEC-5), virtio-fs sources restricted (SEC-6), guest seccomp on, per-sandb
 ### 4.2 Storage path relocation (block ops leave the VMM)
 
 the incumbent snapshot-streaming machinery is QEMU-centric (QMP `blockdev-snapshot-sync`,
-`block-stream`). **Snapshotting is not a PORCHE requirement**, so none of that machinery is
-carried over: no backing chains, no streaming jobs, no dead-leaf GC. The only block-layer
+`block-stream`). **Snapshot chains are not a PORCHE requirement** (checkpoints are —
+doc 04), so none of that machinery is carried over: no backing chains, no streaming
+jobs, no dead-leaf GC. The only block-layer
 operation that remains is **clone-at-create** (volume ← image), executed by a privileged
 host-side **storage role** that opens the LUKS envelopes and copies
 the decrypted view. Consequences:
@@ -168,6 +175,33 @@ What survives, and how:
   workload (SEC-13) and no PORCHE code parses guest-controlled frames (F42's parser surface
   is gone).
 - Version-lag blast radius shrinks to CLH/kata/kernel, which are covered by I-5/I-8.
+
+### 4.5 Live migration and the runtime question (E-3 — new in v4)
+
+Live migration is a **v1 goal** (FR-34, PERF-13), not PoC scope (doc 07 §3). This
+deliberately re-opens the runtime choice:
+
+- **Cloud Hypervisor** implements VMM-level live migration (upstream protocol); what
+  transfers is guest RAM + device state — not locally attached block storage.
+- **Kata Containers does not migrate sandboxes today** — the kata shim lifecycle has no
+  hand-off of a running VMM. Kata is therefore **not a definitive choice** (operator
+  decision, E-3): the v1 runtime selection is a gate with live migration as a criterion.
+- Options on the table: **direct CLH orchestration** for stateful workloads (the escape
+  hatch doc 06 §5 already listed — full VMM control, migration protocol reachable, but
+  re-introduces per-VMM lifecycle glue that C-1 deleted — honest CT-3 cost); **upstream
+  Kata live-migration support** (zero glue if it lands; out of our control); **two runtime
+  paths** (Kata for ephemeral, direct CLH for stateful — hedged, but two data-plane
+  surfaces to audit and attack-test, SEC-40 matrix cost). The runtime-class hedge (A-6)
+  keeps any swap a tested configuration change (CT-5).
+- **Volume dimension (the harder half)**: live migration is only clean when volumes are
+  network-attached at cutover — tier S by construction; tier R **elevated to write-through
+  for the migration window** (which itself depends on the A-1 sealable-stack spike); tier E
+  stays on checkpoint migration (ephemeral by choice).
+
+**Gate (doc 08 A-9)**: no v1 live-migration commitment before a two-host spike proves the
+chosen path end-to-end — RAM/state transfer, encrypted-volume cutover, PERF-13 under load.
+The PoC is unaffected (its three bets don't change); the spike follows the PoC and feeds
+the v1 runtime selection.
 
 ---
 
@@ -277,8 +311,8 @@ column is what the new orchestrator does instead. Nothing is reused as software.
 | Phase | Scope | Exit criteria |
 |---|---|---|
 | P0 | 1 host, control plane v0 (new build), host-agent + containerd + kata-clh, one encrypted volume round-trip (create→attach→write→detach) | doc 01 acceptance criteria 1–7 |
-| P1 | Full create-instance flow on the new path; storage worker (clone) under encryption; KMS in HA; CNI networking | PERF-1/5/8/9 met; F42-fix PoC (no guest-controlled channel exists to attack); F0.1-fix PoC (metadata without token fails) |
-| P2 | GPU (VFIO/MIG via CLH hotplug), persistent volumes, CMK option for tenants | GPU PoC on A100; CMK wrap hierarchy reviewed |
+| P1 | Full create-instance flow on the new path; storage worker (clone) under encryption; KMS in HA; CNI networking; ingress data path (per-host proxy, E-2); **live-migration two-host spike → v1 runtime decision (A-9, E-3)** | PERF-1/5/8/9 met; F42-fix PoC (no guest-controlled channel exists to attack); F0.1-fix PoC (metadata without token fails); runtime decision recorded (PERF-13 evidence or runtime swapped, CT-5) |
+| P2 | GPU (VFIO/MIG via CLH hotplug), runtime volume attach/detach (hotplug), live migration GA (from the P1 decision), CMK option for tenants | GPU PoC on A100; PERF-13 met; CMK wrap hierarchy reviewed |
 | P3 | HA hardening, fleet version-registry enforcement, CI attack suite at full coverage | I-5 gate enforced (deploys blocked on EOL/CVE) |
 
 ---
@@ -287,6 +321,8 @@ column is what the new orchestrator does instead. Nothing is reused as software.
 
 - [ ] Volume attach model in v1: CRI block mounts vs direct-assignment annotations — pick
       the least-privileged path that keeps `/dev/mapper` devices out of virtio-fs.
+- [ ] Live-migration runtime path (A-9): direct CLH for stateful workloads vs upstream Kata
+      support vs two runtime paths — decided by the two-host spike (P1); gate for v1.
 - [ ] Does the metadata proxy live per-host or in the control plane? (Per-host = smaller blast radius;
       SI = one place to audit.)
 - [ ] Image pull latency vs PERF-1: per-host pull-through cache sizing, and whether guest

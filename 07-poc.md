@@ -1,6 +1,7 @@
 # 07 — PoC Scope (pre-P0)
 
-Working document — v1, 2026-10-17. Defines the **first proof of concept**: the smallest
+Working document — v2, 2026-10-18. **v2**: live migration explicitly deferred (v1 goal,
+not PoC scope — E-3). Defines the **first proof of concept**: the smallest
 buildable system that validates the riskiest technical bets of the design. Everything not
 listed in scope is **deferred by decision**, not forgotten — see §3.
 
@@ -58,6 +59,7 @@ not after building a control plane around it.
 | CI attack suite beyond the 3 PoCs | the 3 prove the harness works; coverage grows with the fleet |
 | CNI networking, egress proxy, ingress model | Kata defaults suffice to measure boot/isolation |
 | GPU (VFIO/MIG), CMK, cross-DC, HA everything | phase 2+ per doc 02 §7 |
+| **Live migration + runtime selection (E-3, A-9)** | v1 goal, **not PoC scope**: needs two hosts and a runtime that migrates (Kata does not hand off a running VMM today — doc 02 §4.5); a dedicated spike after the PoC feeds the v1 gate |
 | dm-thin clone-at-create, snapshot-resume fast boot (borrowings) | perf optimizations on top of a working baseline |
 
 ## 4. Position in the roadmap

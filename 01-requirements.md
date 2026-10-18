@@ -1,13 +1,17 @@
 # 01 — Requirements Specification
 
-Working document — v1, 2026-10-17. First normative document of the PORCHE project.
+Working document — v2, 2026-10-18. First normative document of the PORCHE project.
+**v2 scope change** (operator decisions, doc 08 E-1..E-3): stateful enterprise workloads
+and ingress access are first-class v1 citizens; live migration is a v1 goal (runtime gate —
+doc 08 A-9); Kata is not a definitive runtime choice (CT-5).
 
 **Conventions (RFC 2119, doc 11 §1)**: every FR/SEC/PERF/OPS statement is **MUST** —
 normative, violation is a defect — unless explicitly marked **SHOULD** (deviation requires
 recorded justification) or **MAY** (optional). Terms carry the doc 11 glossary meanings.
 
 **Purpose**: define the requirements of a bare metal cloud orchestrator for untrusted workloads
-(AI agents, jobs, builds), GPU in phase 2. First-in-class performance and security, by design.
+(AI agents, jobs, builds) **and long-lived stateful enterprise applications**, GPU in phase 2.
+First-in-class performance and security, by design.
 
 **Reference adversary**: a compromised workload running on the pool — it attempts guest→host
 escape, neighbor attacks, and control-plane bypass. Secondary adversary: the curious legitimate
@@ -26,6 +30,9 @@ tenant (platform enumeration, fingerprinting).
 
 - An orchestrator that **provisions and manages bare metal hosts** (immutable, hardened OS) and
   **runs isolated workloads** on them (microVMs, container-compatible API).
+- A platform where **stateful workloads are first-class citizens** (E-1): long-lived enterprise
+  applications (databases, app servers, queues) run on persistent tier R/S volumes, serve
+  ingress, and are **live-migratable** (v1 goal, E-3) for non-disruptive maintenance.
 - A control plane (API, scheduler, image pipeline, metering, observability).
 - A set of verifiable security guarantees (every SEC requirement is testable).
 
@@ -34,8 +41,10 @@ tenant (platform enumeration, fingerprinting).
 - **Not a general-purpose public IaaS** — no commercial multi-region, no heterogeneous instance
   catalog, no customer billing.
 - **Not Kubernetes** — no dependency on the K8s ecosystem (but OCI image compatibility).
-- **No full VMs** (category 5) in v1 — heterogeneous guest OSes (Windows) and live migration
-  are out of scope. Re-evaluation possible in phase 3+.
+- **No heterogeneous guest OSes** (category 5) in v1 — Windows is out of scope
+  (re-evaluation possible in phase 3+). **Live migration is in scope as a v1 goal** (E-3):
+  it applies to microVMs and does not require category-5 VMs. It is gated on the v1 runtime
+  selection (doc 08 A-9), not deferred to phase 3+.
 - **No trust in the workload** — no feature may depend on the goodwill of executed code
   (a "cooperative agent" is never the only control).
 
@@ -47,8 +56,9 @@ tenant (platform enumeration, fingerprinting).
 |---|----------|---------|---------------------|
 | U1 | Untrusted AI agent execution (generated code, tool-use) | 0.5–4 vCPU, 0.5–8 GB, ephemeral (min–hours), controlled egress | Strong isolation + fast boot |
 | U2 | Disposable build/CI jobs | 1–8 vCPU, bursty I/O, controlled rootfs | Density + ephemerality |
-| U3 | Dev environments | persistent, long sessions | Persistent volumes, long-lived VMs (no snapshotting required) |
-| U4 | GPU workloads (inference, fine-tuning) | phase 2: A100 via VFIO passthrough or MIG | Isolation + GPU scheduling |
+| U3 | Dev environments | persistent, long sessions | Persistent volumes, long-lived VMs |
+| U4 | Stateful enterprise applications (databases, app servers, queues) | 2–32 vCPU, 2–128 GB, tier R/S volumes, long-lived (weeks–years), serves ingress | Live migration + non-disruptive maintenance (E-1/E-2/E-3) |
+| U5 | GPU workloads (inference, fine-tuning) | phase 2: A100 via VFIO passthrough or MIG | Isolation + GPU scheduling |
 
 ---
 
@@ -96,8 +106,9 @@ tenant (platform enumeration, fingerprinting).
 ### 3.3 Networking
 
 - **FR-20** — Default egress NAT through an **authenticated, filtered** proxy (per-tenant/
-  workload allow-list); no ingress by default; any port exposure is an explicit, auditable,
-  revocable action.
+  workload allow-list); **no ingress by default**, but ingress exposure is a **first-class
+  v1 capability** (E-2): every exposure is an explicit, auditable, revocable API object
+  (doc 09 — Exposure), enforced by the per-host data path, never by guest cooperation.
 - **FR-21** — Strict L2 isolation between workloads (netns per VM, no bridge shared between
   tenants); verifiable by test (see SEC-30).
 - **FR-22** — Per-workload egress bandwidth cap (token bucket); the cap is enforced by the
@@ -116,8 +127,9 @@ tenant (platform enumeration, fingerprinting).
   host↔shard path latency). **Local storage is bounded by space only**: capacity is
   accounted physically at placement — `Σ(E sizes) + Σ(R dirty budgets) ≤ host NVMe` — and
   local performance is the raw device, unallocated and unshaped; the space bound and the
-  perf bound are distinct contracts (local = space, network = performance). Persistent
-  volumes in phase 2 (replicated, encrypted).
+  perf bound are distinct contracts (local = space, network = performance). **Persistent
+  volumes (tier R/S, encrypted) are v1** — the stateful-workload path (E-1); runtime
+  attach/detach of a volume to a *running* workload is phase 2.
 - **FR-31** — Guest image pipeline: immutable, signed, versioned rootfs; **no tenant-supplied
   image is executed directly** — it is either rebuilt (controlled build) or run through an
   intake sandbox (see SEC-40).
@@ -128,9 +140,12 @@ tenant (platform enumeration, fingerprinting).
   crash-consistent checkpoint of a tier-R volume on network storage (opt-in app-consistency
   via in-guest freeze); any host can boot a workload from a sealed checkpoint; retention
   "latest + N" with background compaction — no user-visible backing chains.
-- **FR-34** — **Workload migration**: checkpoint migration (tier R/S) or terminate +
-  reschedule (tier E) available at will — drain, rebalance, user-initiated; targets always
-  within the same user's allocation; affinity honored (doc 05 §7.1).
+- **FR-34** — **Workload migration**, two primitives, both available at will (drain,
+  rebalance, user-initiated): **checkpoint migration** (tier R/S: seal → restore on target;
+  tier E: terminate + reschedule) and **live migration** for long-lived stateful workloads
+  (v1 goal, E-3 — near-zero-cutover VMM-level transfer; gated on the runtime selection,
+  doc 08 A-9). Targets always within the same user's allocation; affinity honored
+  (doc 05 §7.1).
 - **FR-35** — **Rolling upgrades, user-action-free**: platform-initiated host reimage in
   canary rings with version gates and drain concurrency limits per user (doc 05 §7.2).
 
@@ -266,6 +281,7 @@ tenant (platform enumeration, fingerprinting).
 | PERF-10 | Tier-R/E write latency vs raw local NVMe | ≤ 3× raw NVMe (4k, qd=1) | fio on reference hardware |
 | PERF-11 | Checkpoint seal guest I/O pause (tier R) | < 100 ms P99 | seal under load in CI |
 | PERF-12 | Checkpoint migration cutover (tier R, ≤ 10 GB dirty set) | P50 < 60 s; P99 < 300 s | migration under load in CI |
+| PERF-13 | Live-migration cutover pause (stateful workload, ≤ 32 GB RAM, tier R elevated to write-through for the window) | P99 < 1 s; convergence under sustained dirty rate ≤ 250 MB/s | migration under load in CI |
 
 **Comparison class (B-2, doc 08)**: cold-boot microVM platforms. Cold start (PERF-1) is
 measured against published cold-boot baselines (e.g., Firecracker-class ~125 ms VMM boot);
@@ -280,8 +296,11 @@ blocks the release.
 ## 6. Reliability & operations
 
 - **OPS-1** — Control-plane availability: 99.9% (replicated components, quorum).
-- **OPS-2** — Host failure: ephemeral workloads are terminated and reschedulable; persistent
-  ones (U3) survive on replicated storage and are restartable. Host RTO < 10 min.
+- **OPS-2** — Host failure: ephemeral workloads are terminated and reschedulable; stateful
+  ones (U3/U4) survive on tier R/S storage and are restartable (RTO < 10 min). **Host
+  maintenance is non-disruptive for stateful workloads**: drain migrates them live
+  (v1 goal, E-3) or by checkpoint — platform-initiated action never requires terminating a
+  user's long-lived workload (doc 05 §7.2).
 - **OPS-3** — Data-plane updates (kernel, VMM, runtime) without full downtime: rolling drain
   (see FR-12).
 - **OPS-4** — A workload cannot degrade its host beyond its quotas (CPU, RAM, I/O, fds,
@@ -307,6 +326,9 @@ blocks the release.
   when leaving an integrated stack).
 - **CT-4** — Licensing: open-source components only (Apache/MIT/AGPL acceptable), no dependence
   on a single vendor.
+- **CT-5** — **Runtime replaceability** (E-3): the microVM runtime (Kata + CLH today) is a
+  **selection, not a commitment**; live-migration capability is a v1 selection criterion;
+  the data plane stays runtime-swappable (runtime-class hedge, doc 08 A-6).
 
 ---
 

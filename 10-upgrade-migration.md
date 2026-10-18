@@ -1,7 +1,8 @@
 # 10 — Operator Runbook: Metal Host Upgrades and Workload Migration
 
-Working document — v1, 2026-10-17. Detailed operator process behind doc 05 §7 (summary) and
-FR-34/35. **Procedural sections follow the doc 11 §3 writing rules** (one instruction per
+Working document — v2, 2026-10-18. Detailed operator process behind doc 05 §7 (summary) and
+FR-34/35. **v2**: §5 adds live migration as a v1 goal (E-3, doc 08 A-9).
+**Procedural sections follow the doc 11 §3 writing rules** (one instruction per
 step, approved verbs, explicit end states). Fleet scale: up to ~1,000+ metal nodes, one user
 per host (SEC-16). Host lifecycle and security are **platform-operator responsibility**;
 the process is **user-action-free** (users see effects, never perform steps).
@@ -91,10 +92,16 @@ rejoined ◄──(soak ok)── attesting ◄──(boot into new slot)── 
 
 ## 5. Workload migration mechanics (the primitive behind drain, rebalance, user moves)
 
-**No live migration** (by design). Migration = *stop + new placement + start*, with the
-checkpoint preserving data. That makes failure handling trivial: a failed migration is just
-a workload that stopped — it is restarted on any eligible host; there is no half-migrated
-in-between state.
+Migration has two primitives (E-3, v1 goal). **Checkpoint migration**: stop the workload,
+place it anew, start it. The checkpoint preserves the data. **Live migration** (stateful
+workloads): transfer the VMM to the target host, then cut over. Pause the guest only at
+cutover. Elevate a tier-R volume to write-through for the migration window (doc 02 §4.5).
+Tier S volumes are already network-attached. Tier E workloads use checkpoint migration
+only (ephemeral by choice).
+
+Failure handling stays trivial. A failed checkpoint migration is a stopped workload.
+Restart it on any eligible host. A failed live migration falls back to checkpoint
+migration. There is no half-migrated in-between state.
 
 | Step | Tier E (ephemeral) | Tier R (replicated-async) | Tier S (synchronous) |
 |---|---|---|---|
@@ -109,7 +116,9 @@ in-between state.
 | 9. Record | audit + placement events; source resources reaped | idem | idem |
 
 - **Downtime**: E ≈ cold start; S ≈ cold start; R ≈ seal + cold start (PERF-12: P50 < 60 s
-  for ≤ 10 GB dirty).
+  for ≤ 10 GB dirty). Live migration (stateful): cutover pause only (PERF-13: P99 < 1 s) —
+  preferred for drain and rebalance of long-lived workloads when the runtime supports it
+  (A-9 gate).
 - **Allocation boundary (SEC-16)**: targets are always within the owner's allocation —
   checkpoint ciphertext never transits another user's host.
 - **Single-host user edge case**: no in-allocation target exists. Resolution: the platform

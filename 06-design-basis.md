@@ -113,6 +113,13 @@ future VFIO GPU path and is Rust/rust-vmm (fuzzed, smaller attack surface); mini
 glue. Escape hatches: Firecracker for max density with zero GPU (more glue); direct CLH
 orchestration for total VMM control. **Avoid QEMU microVM.**
 
+**Scope change (2026-10-18, doc 08 E-3)**: live migration is now a **v1 goal**. CLH
+implements VMM-level live migration; Kata does not migrate sandboxes. The stack above is
+therefore the **current default, not a definitive choice** — the v1 runtime selection is a
+gate with live migration as a criterion (doc 08 A-9, doc 02 §4.5). Direct CLH orchestration
+(the escape hatch above) is the leading alternative; the Firecracker hedge does not offer
+live migration either.
+
 Hardening essentials:
 - Kata ≥ 4.0.0 (fixes CVE-2026-50540, CVE-2026-47243, CVE-2026-44210); annotation
   allow-list **empty by default** (never `io.katacontainers.config_path`,

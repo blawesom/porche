@@ -1,6 +1,7 @@
 # 04 — Storage Tiers: Local Write-Back, Async Network Sync, Checkpoint Semantics
 
-Working document — v1, 2026-10-17. Evaluates the proposal: **local storage for writes, async
+Working document — v2, 2026-10-18. **v2**: tier R/S confirmed as the v1 stateful-workload
+path (E-1); live-migration volume semantics added (§2, E-3). Evaluates the proposal: **local storage for writes, async
 write-out to network storage, and "snapshot" redefined as a sync-to-network checkpoint.**
 Extends `02-architecture.md` §5 (I-2); supersedes the all-remote-NFS volume path for most
 workload classes.
@@ -36,7 +37,7 @@ Every volume picks a tier at creation (immutable per volume in v1):
 | Tier | Write path | Durability contract | RPO | For |
 |---|---|---|---|---|
 | **E — ephemeral** | local NVMe only | none past teardown; wiped at teardown | ∞ | U1 agents, U2 builds (the disposable 90%) |
-| **R — replicated-async** | local NVMe, epoch sync to remote envelope | crash-consistent remote checkpoint | ≤ sync interval (default 60 s, tunable 10 s–1 h) | U3 dev envs, long-running agents worth restarting |
+| **R — replicated-async** | local NVMe, epoch sync to remote envelope | crash-consistent remote checkpoint | ≤ sync interval (default 60 s, tunable 10 s–1 h) | U3 dev envs, **U4 stateful apps (the long-lived default)**, long-running agents worth restarting |
 | **S — synchronous** | write-through to remote envelope (v3 path) | every flush durable on network storage | 0 | control-plane data, databases, anything the tenant declares critical |
 
 Restore semantics:
@@ -45,6 +46,12 @@ Restore semantics:
   independence returns at checkpoint granularity). Guest filesystem journal replays
   (crash-consistency, see §3).
 - **S** — v3 behavior; restart anywhere, no data loss on host loss.
+
+**Live migration** (v1 goal, E-3): clean only when the volume is network-attached at
+cutover — tier S by construction; tier R is **elevated to write-through (S semantics) for
+the migration window**, then demoted. The sealable tier-R stack (§3.1, A-1 spike) is a
+prerequisite for that elevation. Tier E stays on checkpoint migration (ephemeral by
+choice). See doc 02 §4.5.
 
 ### 2.1 What each tier buys — performance, latency, and cost
 

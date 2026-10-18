@@ -1,8 +1,10 @@
 # 08 — Design Review: Challenges and Gaps
 
-Working document — v1, 2026-10-17. A red-team pass over decisions 01–07. Each item: what we
+Working document — v2, 2026-10-18. A red-team pass over decisions 01–07, plus the
+scope-change register (§E). Each item: what we
 decided, the challenge, verdict ( upheld / needs change / open ), and the action.
 Verdicts marked **needs change** are applied to the docs in the same commit.
+**v2**: A-9, E-1..E-3, B-2 amendment (live migration in scope as a v1 goal).
 
 ---
 
@@ -119,6 +121,33 @@ OPS-1's 99.9% target is a requirement **on the new build**: the later software-a
 spec must design control-plane HA from scratch (replication, quorum, failover of the state
 store and API tier) and prove it before OPS-1 is claimed.
 
+### A-9. Live migration vs the Kata runtime [open — v1 gate (scope change E-3)]
+
+Live migration is a **v1 goal** (operator decision, 2026-10-18 — E-register below), not
+PoC scope. The challenge: **Cloud Hypervisor implements VMM-level live migration, but
+Kata Containers does not migrate sandboxes** — the kata shim lifecycle has no hand-off of
+a running VMM. The v1 requirement therefore re-opens the runtime choice, and the operator
+has ruled that **Kata is not a definitive choice**. Options on the table:
+
+1. **Direct CLH orchestration** for stateful workloads (escape hatch, doc 06 §5) — full
+   control, migration protocol reachable; cost: re-introduces per-VMM lifecycle glue that
+   C-1 deleted (CT-3 tension, honest cost).
+2. **Upstream Kata live-migration support** — zero glue if it lands; out of our control,
+   no date.
+3. **Two runtime paths** (Kata for ephemeral, direct CLH for stateful) — hedged, but two
+   data-plane surfaces to audit and attack-test (SEC-40 matrix cost).
+
+Second, harder half — **volumes**: VMM migration transfers RAM + device state, not
+locally attached block storage. Live migration is only clean when volumes are
+network-attached at cutover: tier S by construction, tier R **elevated to write-through
+for the migration window** (which depends on the A-1 sealable-stack spike). Tier E stays
+on checkpoint migration (ephemeral by choice).
+
+**Gate**: a two-host spike, end-to-end (RAM/state transfer + encrypted-volume cutover +
+PERF-13 under load), before any v1 live-migration commitment. The PoC is unaffected — its
+three bets (doc 07 §1) do not change; the spike follows the PoC and feeds the v1 runtime
+selection (CT-5). Full analysis: doc 02 §4.5.
+
 ## B. Gaps in objectives
 
 ### B-1. No operating model [RESOLVED — per operator decision]
@@ -138,9 +167,11 @@ is staffed platform work, sized for a 1,000-node fleet, not a hobby.
 performance priorities are **cold start** and **migration flexibility** — not
 snapshot-resume boot (deliberately not adopted; doc 07 §3). Concretely: PERF-1 (cold
 start P50 < 1.5 s) is measured against published cold-boot baselines, and a new SLO
-**PERF-12** covers checkpoint migration cutover (FR-34). Live migration remains out of
-scope by design; migration = seal checkpoint + restore, available at will (drain,
-rebalance, user-initiated) — that is the flexibility metric.
+**PERF-12** covers checkpoint migration cutover (FR-34). **Superseded (2026-10-18, E-3)**:
+live migration is now a **v1 goal** — PERF-13 (cutover pause) added, mechanism question
+opened as A-9. The comparison class and PERF-1/12 stand unchanged; migration = seal
+checkpoint + restore *or* live transfer, available at will (drain, rebalance,
+user-initiated) — that is the flexibility metric.
 
 ### B-3. PORCHE API is a one-line requirement [RESOLVED — object catalog specified]
 
@@ -173,3 +204,15 @@ Postgres backup + audit Merkle-head continuity noted as P1 scope; the KEK ceremo
 | 6 | Operating model: users, staffing, SLA owners (B-1) | before P1 |
 | 7 | API specification (B-3) | before P0 control plane |
 | 8 | Kata project-health review cadence (A-6) | ongoing, OPS-10 |
+| 9 | Live-migration two-host spike + v1 runtime selection (A-9, E-3) | after PoC; before v1 commitment |
+| 10 | Ingress data-path design: per-host proxy + Exposure object (E-2) | before P1 |
+
+---
+
+## E. Scope-change register (operator decisions)
+
+| # | Date | Decision | Applied in |
+|---|------|----------|-----------|
+| E-1 | 2026-10-18 | **Stateful workloads are first-class v1 citizens** — any enterprise application (databases, app servers, queues); Windows guest OSes stay out of scope | doc 01 §1/§2/FR-30/OPS-2, doc 04 §2 |
+| E-2 | 2026-10-18 | **Ingress access is first-class v1** — still explicit/auditable/revocable, never on by default, never guest-controlled | doc 01 FR-20, doc 02 I-14/§7, doc 09 (Exposure) |
+| E-3 | 2026-10-18 | **Live migration is a v1 goal** (not PoC scope); **Kata is not a definitive choice** — runtime selection is a v1 gate with live migration as a criterion (A-9) | doc 01 FR-34/PERF-13/CT-5, doc 02 §4.5/§7/§8, doc 03 §4.1, doc 04 §2, doc 05 §7.1, doc 07 §3, doc 10 §5, doc 11 (migration terms) |

@@ -1,9 +1,10 @@
 # 11 — Glossary and Controlled-Language Rules
 
-Working document — v1, 2026-10-17. One word, one meaning — the lightweight controlled-English
+Working document — v2, 2026-10-18. One word, one meaning — the lightweight controlled-English
 contract (inspired by ASD-STE100, without its full cost; see doc 08 discussion). Applies to
 the whole corpus from this version on. Legacy uses that predate this glossary are superseded
-by the definitions below.
+by the definitions below. **v2**: migration terms redefined — live migration is in scope
+as a v1 goal (E-3, doc 08).
 
 ---
 
@@ -39,8 +40,10 @@ In doc 01 (and wherever requirements are restated):
 | **report** | A host self-declaration (e.g., "wipe complete"). Reports are recorded; verification is separate (doc 08 A-3). | verified evidence (say *attest*) |
 | **drain** | The host state/transition that removes workloads and excludes new placement (doc 05, doc 10). | — |
 | **reimage** | Replace the host artifact by writing the spare A/B slot and booting into it (doc 10). | any in-place update (never used — image is immutable) |
-| **migration** | Stop a workload + place it anew + start it (checkpoint-carrying for tiers R/S). Never live migration. | live migration, hypervisor-level migration |
-| **cutover** | The user-visible downtime window of one migration. | — |
+| **migration** | Move a workload to another host within the owner's allocation. Two mechanisms: *checkpoint migration* and *live migration*. | — |
+| **checkpoint migration** | Stop a workload + place it anew + start it (checkpoint-carrying for tiers R/S). The default mechanism, all tiers. | live migration |
+| **live migration** | VMM-level transfer of a running workload; the guest sees only the cutover pause. Stateful workloads — v1 goal (E-3). | checkpoint migration |
+| **cutover** | The user-visible downtime window of one migration (for live migration: the pause at switchover). | — |
 | **allocation** | The binding of one host to one user (SEC-16; doc 05). | — |
 | **tier** | Volume durability: E / R / S (doc 04). Nothing else is a tier. | performance level, storage location |
 | **class** | Storage location/cost of a remote copy: hot / cold (doc 04 §2.2). | durability (say *tier*) |
@@ -80,8 +83,10 @@ Re-evaluation triggers: each new LTS of a rejected alternative. (Origin: SEC-2, 
 
 ## 5. Retrofit status
 
-- Doc 01: RFC 2119 keywords added to conventions (§0) — requirement statements are MUST by
+- Doc 11: RFC 2119 keywords added to conventions (§0) — requirement statements are MUST by
   default.
+- Doc 11 v2 (2026-10-18): *migration* redefined into *checkpoint migration* / *live
+  migration* per scope change E-3; earlier "never live migration" uses are superseded.
 - Doc 10: procedural sections restructured to the rules above.
 - Doc 01 SEC-2 / 02 §1+§4.4 / 06 §1+§2 / 08 A-6: QEMU comparisons restated against the
   latest LTS at decision time (§4 rule); EOL incidents re-cast as process lessons.

@@ -1,6 +1,8 @@
 # 03 — Simplification Pass: What the New Build Does NOT Re-implement
 
-Working document — v1, 2026-10-17. Analysis and recommendations applied to `02-architecture.md` (v3).
+Working document — v2, 2026-10-18. Analysis and recommendations applied to
+`02-architecture.md` (v3). **v2**: tradeoff §4.1 rewritten for the scope change (live
+migration is a v1 goal — doc 08 E-3); C-1..C-6 otherwise stand.
 
 **Principle**: every incumbent-design component whose job is already done by an upstream, audited
 Kata/containerd component gets **deleted, not adapted**. The measure of success is the size
@@ -115,8 +117,14 @@ host is upstream, fuzzed, and disposable-per-workload.**
 
 ## 4. Tradeoffs accepted
 
-1. **No live migration, no pause-and-inspect, no block jobs** — gone with QMP. Not required
-   (no snapshots; host drain = terminate + reschedule).
+1. **No QMP block jobs, no pause-and-inspect** — gone with QMP, permanently. **Live
+   migration is in scope as a v1 goal** (E-3, doc 08), but by a different mechanism
+   (VMM-level transfer, FR-34) — never by re-introducing QMP machinery. Consequence: the
+   C-1/C-2 deletions stand unconditionally for the *ephemeral* workload class; for
+   *stateful* workloads, the v1 runtime selection (A-9 gate, doc 02 §4.5) decides whether
+   Kata is used at all. If stateful workloads run on direct CLH, the per-VMM lifecycle
+   glue that C-1 deleted returns in reduced form — the honest CT-3 cost of live migration.
+   Checkpoint migration (drain = seal + restore) remains the fallback primitive for all tiers.
 2. **Runtime volume attach** — CLH hotplug exists, but v1 simplifies: all volumes defined at
    workload creation, attach-at-boot only. Runtime attach is a phase-2 addition if a use case
    demands it.

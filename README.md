@@ -32,7 +32,7 @@ the design.
 | 05 | [dedicated hosts](05-dedicated-hosts.md) | One user per bare metal host; placement views; attract/repulse resiliency model |
 | 06 | [design basis](06-design-basis.md) | Self-contained research record: isolation landscape, CVE history, assessment findings (F-register), incumbent design, stack decision |
 | 07 | [PoC scope](07-poc.md) | First proof of concept: minimal scope, explicit deferrals, kill criteria |
-| 08 | [challenges](08-challenges.md) | Design review: challenged decisions, contradictions, objective gaps, action list |
+| 08 | [challenges](08-challenges.md) | Design review: challenged decisions, contradictions, objective gaps, action list + scope-change register (E) |
 | 09 | [API](09-api.md) | Object catalog: CRUD + main attributes (User, Host, Allocation, Workload, Volume, Checkpoint, …) |
 | 10 | [upgrade & migration](10-upgrade-migration.md) | Operator runbook: host image/A-B reimage, canary rings, workload migration mechanics, failure handling |
 | 11 | [glossary](11-glossary.md) | Controlled-language contract: one word one meaning, RFC 2119 keywords, procedure writing rules |
