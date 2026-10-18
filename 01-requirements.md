@@ -133,6 +133,12 @@ tenant (platform enumeration, fingerprinting).
   tenants); verifiable by test (see SEC-30).
 - **FR-22** — Per-workload egress bandwidth cap (token bucket); the cap is enforced by the
   control plane, not by the guest.
+- **FR-23** — **User-defined address range**: a tenant may define the RFC1918 range from
+  which their workloads' /32s are assigned (bounded size, /24–/16); the platform validates
+  non-overlap against all other users' ranges **and platform-reserved ranges**
+  (fabric, storage net, link-local), transactionally, rejecting conflicts with
+  machine-readable reasons; if unspecified, the platform allocates. Range choice affects
+  **allocation policy only** — never reachability (FR-20/21 unchanged; doc 14 §3). [E-13]
 
 ### 3.4 Storage and images
 

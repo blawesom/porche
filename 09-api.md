@@ -49,6 +49,14 @@ operator-owned mutations where relevant.
 | Attributes | `id`, `kind` (rack/power/maintenance), `metadata` |
 | CRUD | read (catalog: groups reachable by the caller's allocations), create/update/delete (operator) |
 
+### Vpc
+
+| | |
+|---|---|
+| Attributes | `id`, `user`, `cidr` (RFC1918 — user-requested or platform-allocated, FR-23), `subnets` (refs), `state` (active/deleting) |
+| CRUD | create (request a range — validated non-overlapping fleet-wide, E-13), read (own), update (add/remove subranges), delete (only when no workload /32s remain) |
+| Notes | spans the user's entire allocation; workload /32s are assigned from it (doc 14 §3); overlap rejections carry machine-readable reasons |
+
 ### Workload
 | | |
 |---|---|

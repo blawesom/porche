@@ -65,7 +65,7 @@ neighbors, and tries to bypass the control plane.
 
 | Object | Value | Owner |
 |---|---|---|
-| User VPC CIDR | allocated at first `AllocateHost` (e.g. /48) | tenant plane, transactional |
+| User VPC CIDR | **user-defined within RFC1918** (E-13) — requested at VPC creation, validated non-overlapping fleet-wide; platform-allocated if unspecified | tenant plane, transactional |
 | Workload IP | **one /32** from the user's VPC CIDR, assigned at create | tenant plane |
 | Host fabric IP | stable per host, on the workload-fabric subnet | admin plane |
 | Storage net | separate subnet/NIC to shards, **tc-shaped** per FR-30 | host-side |
@@ -79,6 +79,15 @@ neighbors, and tries to bypass the control plane.
   The /32 moves with the workload; connections re-establish through the ingress proxy.
 - **Anti-spoof** (control-plane-enforced, never guest-cooperative): nftables in `w-<id>`
   accepts from the tap only the assigned source MAC and IP — everything else drops.
+
+**Address-range policy (E-13)**: a user may define the range (an RFC1918 block, min /24,
+max /16) from which their workloads' /32s are assigned — the VPC object (doc 09). The
+tenant plane validates the request transactionally against every other user's ranges
+**and the platform-reserved fabric/storage/link-local ranges**; an overlapping request is
+rejected with a machine-readable reason (the explainability rule, doc 05 §2). Users see
+only their own ranges (FR-14 scoping — a CIDR choice is not a probe). The choice changes
+*allocation policy only*: /32 assignment, routing, proxies, and reachability rules are
+identical for user-defined and platform-allocated ranges.
 
 ## 4. Egress (FR-20)
 
