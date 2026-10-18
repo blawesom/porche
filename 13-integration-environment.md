@@ -88,6 +88,13 @@ Region `eu-west-2`; subregion `eu-west-2a`. Credentials: local `~/.osc/config.js
    (~0.4 ms RTT; fully workable for the migration spike). Direct egress is `171.33.98.94`.
 8. Public IPs are allocated and linked explicitly (`CreatePublicIp` + `LinkPublicIp`).
 9. CLH v54 CLI: `--cpus boot=N`, `--memory size=NM` — first thing the host-agent encodes.
+10. **CLI = `octl`** (v0.0.34, static Go binary, Sigstore-verified at install; successor of
+    the legacy `osc-cli`): `octl iaas api <Operation> --profile sandbox`, typed flags.
+    Two lessons: the legacy `osc-cli` passed CLI strings through verbatim, so
+    `--NestedVirtualization true` sent string `"true"` and the API rejected it with 4110 —
+    a Python SDK shim (`bin/osc-api.py`) existed just for that, now deleted because octl's
+    flags are typed. And **only the `sandbox` profile of `~/.osc/config.json` is ever used**
+    (the file holds two profiles; the other is out of bounds for this project).
 
 ## 5. Provisioning recipe (reproducible)
 
@@ -117,14 +124,19 @@ control plane:
 
 ## 6. Current state (2026-10-18)
 
-| Resource | ID | Status |
+| Resource | ID | Status (verified via octl, 2026-10-18 evening) |
 |---|---|---|
 | Dedicated group `Test1` | `ded-53c8318b` (eu-west-2a, gen 7) | pre-existing, in use |
-| Metal node 1 (validation) | `i-7482ee3c` (`tinav7.c8r16p1`, nested virt) | **deployed, verified** — CLH v54.0 boots guests; no second BSU yet |
-| Public IP (node 1) | `eipalloc-84925ae5` → `148.253.126.10` | linked |
+| Metal node 1 (validation) | `i-7482ee3c` (`tinav7.c8r16p1`, nested virt) | **running** — CLH v54.0 boots guests; root BSU only; ephemeral public IP `171.33.73.205` (its EIP is disassociated: public IPs drop when a VM stops) |
+| Node 1 public IP | `eipalloc-84925ae5` (`148.253.126.10`) | allocated, **unlinked** |
+| Node 1 second BSU | `vol-414ae55c` (200 GB) | allocated, **unlinked** |
 | SG `porche-integ-sg` | `sg-ba94b9e2` | deployed |
 | Keypair `porche-integ` | local `id_ed25519_research` | deployed |
-| Metal node 2, second BSUs, NFS VM, control-plane VM | — | **not yet provisioned** (recipe §5) |
+| SGs `hostcp` / `hostshard` | `sg-6145a812` / `sg-63985462` | deployed (gRPC, NFS, migration-TLS rules) |
+| Public IPs (node 2 / NFS / CP) | `eipalloc-7df5877e` / `eipalloc-64230109` / `eipalloc-37f28ba3` | allocated, unlinked |
+| Metal node 2 | `i-2727754e` | **created 2026-10-18, terminated the same day** — gone from the account; the local TF state still records it (**drift: reconcile before the next apply**) |
+| Node 2 second BSU | `vol-c14305ae` (200 GB) | allocated, unlinked |
+| NFS VM, control-plane VM | — | **not yet provisioned** (recipe §5) |
 
 Note: node 1 currently runs stock Rocky 9 — it was the nested-virt validation vehicle.
 Metal nodes move to the **FCOS derivative OMI** once built (action 11); Rocky + hardening
@@ -143,7 +155,12 @@ sysctls is the acceptable interim.
 
 ## 8. Open items
 
-- [ ] Provision metal node 2 + second BSUs + NFS VM + control-plane VM (§5).
+- [x] Provision second BSUs + host SGs (`hostcp`/`hostshard`) + public IPs (2026-10-18,
+      via `infra/integration/`).
+- [ ] Provision metal node 2 (created 2026-10-18, **terminated the same day** — recreate
+      per §5; reconcile the local TF state first: it still records the terminated VM).
+- [ ] Provision the NFS VM + control-plane VM (§5) — SGs and public IPs exist; VM
+      creation pending.
 - [ ] FCOS derivative OMI (import qcow2 → OMI; Ignition via user-data — verify metadata
       compatibility; fallback: bake config into the OMI). Unblocks action 11 validation.
 - [ ] SG set for host↔control-plane and host↔shard flows (gRPC, NFS, migration TLS port).

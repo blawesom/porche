@@ -1,0 +1,14 @@
+# Local state and plans — never commit
+.terraform/
+*.tfstate
+*.tfstate.*
+state-backups/
+tfplan
+*.tfplan
+crash.log
+crash.*.log
+
+# Credentials — never in the repo
+*.tfvars
+!*.tfvars.example
+.env
