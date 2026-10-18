@@ -1,8 +1,9 @@
 # 03 — Simplification Pass: What the New Build Does NOT Re-implement
 
-Working document — v2, 2026-10-18. Analysis and recommendations applied to
+Working document — v3, 2026-10-18. Analysis and recommendations applied to
 `02-architecture.md` (v3). **v2**: tradeoff §4.1 rewritten for the scope change (live
-migration is a v1 goal — doc 08 E-3); C-1..C-6 otherwise stand.
+migration is a v1 goal — doc 08 E-3). **v3 (E-4)**: the Kata/containerd adoption
+recommended here is **superseded** — see §6. C-5/C-6 stand; C-1..C-4 logic inverts.
 
 **Principle**: every incumbent-design component whose job is already done by an upstream, audited
 Kata/containerd component gets **deleted, not adapted**. The measure of success is the size
@@ -144,3 +145,34 @@ host is upstream, fuzzed, and disposable-per-workload.**
   middleware are re-specified deliberately in a **later spec**, not inherited by habit.
 - **Drop** the incumbent public-API surface: PORCHE exposes its own API (FR-40 — workloads, volumes, hosts, placement views), defined fresh rather than inherited.
 - **Adopt** C-1..C-6 into `02-architecture.md` v3 (done).
+
+---
+
+## 6. Supersession — E-4: the simplification inverts (2026-10-18)
+
+The runtime revalidation (doc 08 A-9, E-4) **supersedes this document's central
+recommendation**: Kata and containerd are dropped; Cloud Hypervisor is orchestrated
+directly by the host-agent. §1–§5 stand as the historical analysis of the v2→v3
+architecture; the principle survives, the conclusion inverts:
+
+- **C-1** (delete the per-VM VMM driver) — *inverted*: supervision returns to the
+  host-agent as a **bounded lifecycle role** over CLH's API. No wrapper *process*
+  reappears; the glue is API driving, not protocol parsing.
+- **C-2** (kata-agent replaces the custom agent) — *superseded by something stronger*:
+  **no guest agent at all**. F42's class is eliminated by having no host↔guest protocol
+  (SEC-8 v3), not by replacing one channel with another.
+- **C-3** (metadata token) — stands unchanged.
+- **C-4** (host-agent scope) — *extended*: it gains the per-VM lifecycle role (E-4).
+- **C-5** (raw sparse in LUKS2) — stands unchanged.
+- **C-6** (CNI networking) — stands; CNI is driven by the host-agent, independent of
+  containerd.
+
+**The deeper simplification (doc 02 v5)**: this document asked "which incumbent glue
+does upstream Kata replace?" E-4 asks the better question — "which *intermediary layers*
+can be deleted entirely?" Answer: containerd, the kata shim, and the guest agent. The
+data plane is **host-agent + CLH + kernel**. The CT-3 measure improves: the in-house
+surface is one audited binary; the upstream surface is one VMM.
+
+**What this costs** (recorded honestly, doc 08 A-9): exec into a running workload is not
+a v1 feature; app-consistent seals are deferred; the guest rootfs image is built by our
+pipeline (doc 08 action 11).

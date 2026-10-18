@@ -23,7 +23,7 @@ In doc 01 (and wherever requirements are restated):
 | Term | Meaning | Do not use it for |
 |---|---|---|
 | **workload** | The tenant-facing unit of execution (API object, doc 09). The canonical word for "what a user creates and runs". | — (it is the default term) |
-| **sandbox** | The Kata/containerd execution unit of exactly one workload. Use in runtime context (shim, per-sandbox cgroup). | the API object (say *workload*); the technology (say *microVM*) |
+| **sandbox** | The execution unit of exactly one workload (one microVM + its VMM). Use in runtime context (per-sandbox cgroup). | the API object (say *workload*); the technology (say *microVM*) |
 | **microVM** | The virtual machine as a technology object (guest kernel, VMM, device model). Use when discussing the VM layer itself. | the API object; the runtime unit |
 | **VM** | Reserved for the incumbent design (doc 06) and generic virtualization discussion. Never a PORCHE object. | any PORCHE concept |
 | **volume** | The storage object a workload attaches (API object, doc 09). | the ciphertext file (say *envelope*) |

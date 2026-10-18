@@ -4,7 +4,8 @@ In-house cloud orchestrator: **bare metal**, first-in-class performance, securit
 
 **Base**: a **new orchestrator**, built from scratch. Its design starts from the
 incumbent production platform's design (reference only, doc 06 §4) and improves it —
-Kata/Cloud Hypervisor as the VM runtime, default block encryption, tiered storage
+**Cloud Hypervisor directly orchestrated as the single VM runtime (E-4: no Kata, no
+containerd)**, default block encryption, tiered storage
 durability, dedicated hosts. Software architecture and languages: later spec. **This directory is self-contained**: every fact the design
 documents rely on (research findings, vulnerability history, the incumbent base design, the
 stack decision) is recorded in doc 06. No external repository is needed to read or extend

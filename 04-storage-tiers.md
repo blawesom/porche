@@ -148,8 +148,9 @@ lands in a staging area of the envelope, swap on completion).
 ### 3.4 App-consistent checkpoints (optional, opt-in per sync)
 
 Crash-consistent is the default (fs journal replays — the state every OS is designed to
-tolerate). For tenants who want more: before sealing, host-agent runs `fsfreeze` (or an
-app-specific hook) **inside the guest via kata-agent exec** — this resurrects the useful
+tolerate). For tenants who want more: before sealing, the guest runs a freeze (or an
+app-specific hook) triggered by a **guest-side mechanism — deferred with the guest agent
+(E-4; doc 08 action 12)** — this resurrects the useful
 10% of the incumbent app-consistent-snapshot feature with zero custom guest protocol (the other 90%
 — chains, block-stream, QMP — stays dead).
 
@@ -259,7 +260,8 @@ enforced).
 3. Snapshot API **becomes** the sync/checkpoint API (§4); retention policy "latest + N",
    background compaction; no user-visible chains.
 4. Cross-DC = async shipping of sealed checkpoints only.
-5. `fsfreeze`-style app-consistency as an opt-in per checkpoint via kata-agent exec.
+5. `fsfreeze`-style app-consistency as an opt-in per checkpoint — guest-side trigger
+   deferred with the guest agent (E-4).
 
 Rejected alternatives (for the record):
 

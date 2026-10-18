@@ -9,7 +9,7 @@ the process is **user-action-free** (users see effects, never perform steps).
 
 **Standing principles**
 
-1. **Immutable host = one artifact**: rootfs, kernel, containerd, Kata, CLH, host-agent and
+1. **Immutable host = one artifact**: rootfs, kernel, CLH, host-agent and
    its config ship as a **single signed image** (digest-pinned, SEC-30). There are no
    in-place package upgrades, no config drift — *every* host change (kernel, runtime, agent
    config) is a reimage with a new artifact version.
@@ -27,7 +27,7 @@ the process is **user-action-free** (users see effects, never perform steps).
 
 | Item | Content |
 |---|---|
-| Host image (the unit of upgrade) | host OS rootfs + kernel + containerd + kata + CLH + host-agent + config — one digest |
+| Host image (the unit of upgrade) | host OS rootfs + kernel + CLH + host-agent + config — one digest |
 | A/B slots | two rootfs partitions per host: active + spare; upgrade writes the spare, boots once into it, commits on attestation; bootloader falls back to the previous slot on failure |
 | Version registry | per host: current digest, attestation result, upgrade history; per fleet: which hosts run which digest (drives ring selection and targeted emergency rollout) |
 | Guest images | independent of host upgrades — workloads are unaffected by the host image change except for the reboot/migration itself |
@@ -73,7 +73,7 @@ rejoined ◄──(soak ok)── attesting ◄──(boot into new slot)── 
 2. **`draining`**: scheduler stops placing; workload migration runs (§5). Concurrency
    guard: no second host of the same user is draining.
 3. **`drained`** (verified, not assumed): the platform checks each condition. Verify
-   zero sandboxes (CRI query). Verify zero attached volumes (lease store). Verify zero
+   zero microVMs (host-agent query). Verify zero attached volumes (lease store). Verify zero
    `/dev/mapper` devices. Verify the local NVMe regions are wiped (host report — external
    spot-audit per doc 08 A-3). If any check fails, halt this host.
 4. **`reimaging`**: the sequence on the host is:
@@ -107,11 +107,11 @@ migration. There is no half-migrated in-between state.
 |---|---|---|---|
 | 1. Choose target | same user's allocation, affinity + capacity (incl. NVMe budget) | same + storage-network reservation | same |
 | 2. Pre-warm target | pull image (digest) | pull image | pull image |
-| 3. Quiesce | — | optional `fsfreeze` via kata-agent exec (app-consistent) | optional `fsfreeze` |
+| 3. Quiesce | — | optional guest-side freeze (app-consistent — deferred with the guest agent, E-4) | optional guest-side freeze (deferred, E-4) |
 | 4. Seal | — | force seal: ship dirty epoch to envelope, CRC-verify, record checkpoint | not needed — envelope always current |
-| 5. Stop | CRI stop sandbox | CRI stop sandbox | CRI stop |
+| 5. Stop | host-agent stop (VMM kill) | host-agent stop (VMM kill) | host-agent stop |
 | 6. Release | wipe local region (report) | release volume lease; wipe dirty region (report) | release lease |
-| 7. Start on target | fresh volume from image | attach (KMS unwrap, dm-crypt open) → create sandbox → boot; guest fs journal replays | attach → boot |
+| 7. Start on target | fresh volume from image | attach (KMS unwrap, dm-crypt open) → create VM → boot; guest fs journal replays | attach → boot |
 | 8. Verify | workload healthy (user check or agent probe) | idem | idem |
 | 9. Record | audit + placement events; source resources reaped | idem | idem |
 

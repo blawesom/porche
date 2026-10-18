@@ -1,9 +1,10 @@
 # 01 — Requirements Specification
 
-Working document — v2, 2026-10-18. First normative document of the PORCHE project.
-**v2 scope change** (operator decisions, doc 08 E-1..E-3): stateful enterprise workloads
-and ingress access are first-class v1 citizens; live migration is a v1 goal (runtime gate —
-doc 08 A-9); Kata is not a definitive runtime choice (CT-5).
+Working document — v3, 2026-10-18. First normative document of the PORCHE project.
+**v2 scope change** (doc 08 E-1..E-3): stateful enterprise workloads and ingress access
+are first-class v1 citizens; live migration is a v1 goal.
+**v3** (doc 08 E-4): **Cloud Hypervisor, directly orchestrated, is the single runtime** —
+Kata and containerd are dropped from the data plane (CT-5).
 
 **Conventions (RFC 2119, doc 11 §1)**: every FR/SEC/PERF/OPS statement is **MUST** —
 normative, violation is a defect — unless explicitly marked **SHOULD** (deviation requires
@@ -81,7 +82,10 @@ tenant (platform enumeration, fingerprinting).
   **storage-network reservations (network tiers only)**, max lifetime (mandatory TTL,
   non-waivable by default).
 - **FR-6** — Console/stdio: access to stdout/stderr streams and a serial console, **recorded**
-  (not just relayed) for execution audit.
+  (not just relayed) for execution audit. Mechanism (E-4): the workload's stdio is its
+  serial console (virtio-console), recorded host-side. **Exec into a running workload is
+  not a v1 feature** (no guest agent exists — E-4; a minimal audited guest agent is a
+  phase-2 addition if a use case demands it).
 
 ### 3.2 Scheduling and host allocation
 
@@ -189,11 +193,15 @@ tenant (platform enumeration, fingerprinting).
   R-implications]
 - **SEC-4** — No USB/legacy devices, no persistent VNC (serial console only; any interactive
   console session is an audited event). [R-F34, R-F44]
-- **SEC-5** — Workload definitions **not modifiable by guest/pod annotations**: annotations can
-  neither select the runtime config file, nor bind-mount a host path, nor change devices.
-  Allow-list of annotations, empty by default. [C-CVE-2026-50540, C-CVE-2026-44210, C-GHSA-7fhf]
+- **SEC-5** — **No guest- or tenant-controllable runtime configuration channel exists**:
+  workload definitions (devices, memory, CPU, volumes) are set solely by the control plane
+  (host-agent). The runtime (direct CLH, E-4) exposes no annotation surface at all.
+  [C-CVE-2026-50540, C-CVE-2026-44210, C-GHSA-7fhf — the lesson class stands even though
+  the Kata annotation mechanism no longer exists]
 - **SEC-6** — virtio-fs: never expose an arbitrary host path; source restricted to a
-  per-sandbox dedicated directory; never `--sandbox=none`. [C-CVE-2026-47243]
+  per-sandbox dedicated directory; never `--sandbox=none`. [C-CVE-2026-47243] The direct-CLH
+device model (E-4) uses **block devices only** — virtio-fs is not part of the v1 device
+  model; this requirement governs any future introduction.
 - **SEC-7** — Virtio network offloads disableable **by control-plane policy** and disabled by
   default for untrusted tenants (checksum offload included — the PwnEscape vector).
   [R-F45/CVE-2026-99999]
@@ -205,10 +213,10 @@ tenant (platform enumeration, fingerprinting).
   inventory, or co-residency information exposed. Closes the cross-tenant co-location class
   structurally (F0.1 oracle inverse); the compromised-workload adversary and all controls
   above still apply — a user is not a trust boundary for the platform.
-- **SEC-8** — Host↔guest protocol (vsock/agent API): **authenticated channel** — the guest
-  cannot make the host adopt a key of its choosing; each channel is bound to the sandbox.
-  Satisfied structurally by kata-agent's mutually authenticated TLS over vsock (no custom
-  protocol, no key-adoption surface). [R-F42]
+- **SEC-8** — Host↔guest protocol: **none exists in v1** — there is no guest agent (E-4).
+  F42's class (a guest choosing the host's key over an unauthenticated channel) is
+  eliminated by having no channel. Any future guest-facing channel (exec, app-consistent
+  seal trigger) is a new requirement requiring security review before introduction. [R-F42]
 
 ### 4.2 Host hardening (workload → host-kernel boundary)
 
@@ -218,7 +226,7 @@ tenant (platform enumeration, fingerprinting).
   `kernel.io_uring_disabled=2`, `user.max_user_namespaces=0`, locked `core_pattern`, module
   loading disabled after boot (`modules_disabled=1`), kptr_restrict, dmesg_restrict.
   [C-CVE-2025-39698, C-CVE-2026-43494, C-CVE-2025-52881, C-userns cluster]
-- **SEC-12** — Mandatory LSM: confinement profile per data-plane daemon (containerd, shim,
+- **SEC-12** — Mandatory LSM: confinement profile per data-plane daemon (host-agent,
   VMM) — the VMM runs **unprivileged** with the strict minimum of file descriptors; dedicated
   jailer/namespace for the VMM process.
 - **SEC-13** — **One disposable VMM process per workload**, with a resource cgroup (max CPU,
@@ -249,18 +257,19 @@ tenant (platform enumeration, fingerprinting).
   must be within the upstream maintenance window; version rollout is automated and tested; the
   fleet is deemed non-compliant after N days of lag. [R-F43 — root cause: an EOL VMM line never
   patched]
-- **SEC-32** — Automated CVE watch (NVD, CISA KEV, GitHub advisories of components: kata,
-  cloud-hypervisor, rust-vmm, containerd, kernel) with triage SLA; data-plane components are
-  **priority 1**.
+- **SEC-32** — Automated CVE watch (NVD, CISA KEV, GitHub advisories of components:
+  cloud-hypervisor, rust-vmm crates, kernel) with triage SLA; data-plane components are
+  **priority 1**. (Component list shrinks with E-4: no containerd, no Kata.)
 - **SEC-33** — Host and guest image build pipeline: reproducible, signed, tested (see SEC-40);
   no builds on the production fleet (the 2024 BuildKit/Docker CVEs must be unreachable).
   [C-CVE-2024-23651/52/53]
 
 ### 4.5 Detection & continuous validation
 
-- **SEC-40** — **Continuous attack suite in CI**: public escape PoCs (runc, virtio-fs, kata
-  2025-26, 2026 page-cache kernel bugs) are run against every data-plane build; **any bypass
-  blocks the deployment**. Goal: 0 bypass, proven — not assumed.
+- **SEC-40** — **Continuous attack suite in CI**: public escape PoCs are run against every
+  data-plane build — virtio device-model PoCs against CLH (net/blk/vsock), the 2026
+  page-cache/userns kernel cluster, and the historical runc/kata corpus retained where the
+  attack class applies to our stack; **any bypass blocks the deployment**. Goal: 0 bypass, proven — not assumed.
 - **SEC-41** — Fleet security monitoring: version drift, VMM crashes, guest panics, I/O
   anomalies (signatures of F31-style wedges), control-plane enumeration attempts.
 - **SEC-42** — Every incident/finding gets a registry entry with status
@@ -329,9 +338,11 @@ blocks the release.
   when leaving an integrated stack).
 - **CT-4** — Licensing: open-source components only (Apache/MIT/AGPL acceptable), no dependence
   on a single vendor.
-- **CT-5** — **Runtime replaceability** (E-3): the microVM runtime (Kata + CLH today) is a
-  **selection, not a commitment**; live-migration capability is a v1 selection criterion;
-  the data plane stays runtime-swappable (runtime-class hedge, doc 08 A-6).
+- **CT-5** — **Runtime choice** (E-3/E-4): the runtime is **Cloud Hypervisor, directly
+  orchestrated** — single VMM, no intermediary layers (no Kata, no containerd). The choice
+  stays open per the doc 11 §4 comparison rule (e.g., re-evaluate if Kata ships sandbox
+  live migration for CLH); the design must not grow dependencies that would block such a
+  re-entry.
 
 ---
 

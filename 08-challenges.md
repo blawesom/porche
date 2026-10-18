@@ -1,10 +1,12 @@
 # 08 — Design Review: Challenges and Gaps
 
-Working document — v2, 2026-10-18. A red-team pass over decisions 01–07, plus the
+Working document — v3, 2026-10-18. A red-team pass over decisions 01–07, plus the
 scope-change register (§E). Each item: what we
 decided, the challenge, verdict ( upheld / needs change / open ), and the action.
 Verdicts marked **needs change** are applied to the docs in the same commit.
 **v2**: A-9, E-1..E-3, B-2 amendment (live migration in scope as a v1 goal).
+**v3**: E-4 — direct Cloud Hypervisor as the single runtime; Kata and containerd dropped
+from the data plane. A-2, A-6, A-9 closed.
 
 ---
 
@@ -24,17 +26,18 @@ origin at seal time) is non-trivial.
 dedicated spike, listing the open problem. **New kill-adjacent gate**: no tier-R commitment
 before the spike proves a working, seal-able stack.
 
-### A-2. SEC-5 (empty annotation allow-list) may block the only viable volume attach path [open]
+### A-2. SEC-5 (empty annotation allow-list) may block the only viable volume attach path [RESOLVED — dissolved by E-4]
 
 Direct-assignment of `/dev/mapper` block devices to Kata sandboxes is typically driven by
 annotations — the very mechanism SEC-5 freezes by default. As written, the two requirements
 can conflict, and doc 02 §8 lists the attach model as an open question *on the PoC critical
 path* (it is kill-criterion #2).
 
-**Recommendation**: resolve at PoC in favor of one of (a) CRI block mounts (no annotations),
-or (b) a *curated, platform-owned* allow-list containing exactly the direct-assignment
-annotation — which is not user-controllable input and therefore not the SEC-5 threat
-(tenant-chosen annotations). Amend SEC-5 wording once decided.
+**Resolution (2026-10-18, E-4)**: with Kata dropped, **no annotation mechanism exists at
+all** — volumes attach through Cloud Hypervisor's native block-device API, configured solely
+by the host-agent. The conflict and the SEC-5 amendment both evaporate; SEC-5 is reworded
+to state the invariant directly (no guest- or tenant-controllable runtime configuration
+channel). Kill-criterion #2 of the PoC now tests the CLH block path.
 
 ### A-3. "Attested wipe" is actually "reported wipe" [needs change — fixed]
 
@@ -67,7 +70,7 @@ and *all* tenant data is unreadable — forever. There is no key ceremony, no KE
 single largest unrecoverable-failure mode in the design. **Action required**: key ceremony
 + KEK backup procedure as a P1 entry criterion.
 
-### A-6. Kata dependency risk is real and recent [upheld — mitigation adopted: dual-runtime hedge]
+### A-6. Kata dependency risk is real and recent [closed by E-4 — Kata dropped from the data plane]
 
 We banned QEMU for CVE volume (judged, per the comparison rule, against its **latest LTS**) —
 then adopted Kata, whose 2025-26 record includes 9 CVEs and true guest→host escapes
@@ -95,6 +98,16 @@ minimal surface, GPU path); the hedge converts an existential dependency into an
 operational choice. Plus: Kata project-health review cadence (OPS-10), pin-by-digest,
 and the GPU validation gate unchanged.
 
+**Closure (2026-10-18, E-4)**: the entire challenge is **closed by deletion** — Kata
+(and containerd) are dropped from the data plane; Cloud Hypervisor is orchestrated
+directly by the host-agent. The niche-inside-a-niche exposure (point 1), the kata-agent
+protocol surface (point 2), and the Kata release-churn burden (point 3) all disappear
+with the dependency. What remains of this item: the **CLH project-health review cadence**
+replaces the Kata one (OPS-10), and the GPU/VFIO validation gate (point 4) is unchanged —
+it now tests a *smaller* assumed surface. The dual-runtime hedge is retired: with a
+single VMM, the hedge is version pinning + the escape hatch of re-evaluating runtimes
+(CT-5, doc 11 §4 comparison rule).
+
 ### A-7. Control-plane software architecture [RESOLVED by clarification — new build, later spec]
 
 **Correction of premise (operator)**: PORCHE is a **new orchestrator — there is no legacy
@@ -121,7 +134,7 @@ OPS-1's 99.9% target is a requirement **on the new build**: the later software-a
 spec must design control-plane HA from scratch (replication, quorum, failover of the state
 store and API tier) and prove it before OPS-1 is claimed.
 
-### A-9. Live migration vs the Kata runtime [open — v1 gate (scope change E-3)]
+### A-9. Live migration vs the Kata runtime [RESOLVED — direct CLH, single runtime (E-4)]
 
 Live migration is a **v1 goal** (operator decision, 2026-10-18 — E-register below), not
 PoC scope. The challenge: **Cloud Hypervisor implements VMM-level live migration, but
@@ -147,6 +160,34 @@ on checkpoint migration (ephemeral by choice).
 PERF-13 under load), before any v1 live-migration commitment. The PoC is unaffected — its
 three bets (doc 07 §1) do not change; the spike follows the PoC and feeds the v1 runtime
 selection (CT-5). Full analysis: doc 02 §4.5.
+
+**Resolution (2026-10-18, E-4 — operator decision, evidence-based revalidation)**: after
+re-running the doc 06 §5 decision matrix against the *new* requirement set (E-1..E-3),
+**Cloud Hypervisor is orchestrated directly — single runtime, no Kata, no containerd**.
+Grounds:
+
+- **Live migration**: CLH implements it natively and with operational maturity (TLS
+  transport, documented n-2 version compatibility for migrations); Kata has no sandbox
+  hand-off (issue #1690 open since 2021, no roadmap). The only working Kata live
+  migration found (third-party) drives QEMU via QMP — excluded by SEC-2.
+- **Security**: no guest agent exists at all — the F42 class is eliminated by having no
+  host↔guest protocol (stronger than C-2's fix-by-replacement); no annotation surface
+  (A-2 dissolves); the SBOM shrinks to CLH + kernel + host-agent.
+- **Requirements fit**: FR-31/32 already mandate that tenant images are rebuilt into the
+  platform format — Kata's runtime OCI handling solved a problem the design had
+  legislated away. FR-6 is satisfied by the serial console (virtio-console), recorded
+  host-side.
+- **CT-3 cost (accepted, honest)**: the host-agent grows a per-VM lifecycle role — the C-1
+deletion partially returns, bounded (lifecycle + migration driving over CLH's HTTP API;
+no guest protocol, no image handling). Consequences: **exec into a running workload is
+not a v1 feature** (a minimal audited guest agent would be a phase-2 addition), and
+**app-consistent seals are deferred** (crash-consistency is the default contract).
+
+The two-host spike stands, now on the PoC stack itself (direct CLH), and merges with the
+PoC's second phase: same runtime, second host, live migration under load (PERF-13).
+Upstream watch item retained: if Kata ever ships sandbox live migration for CLH, the
+single-runtime choice is re-evaluated per the doc 11 §4 comparison rule — the design must
+not grow dependencies that make that re-entry harder.
 
 ## B. Gaps in objectives
 
@@ -197,15 +238,17 @@ Postgres backup + audit Merkle-head continuity noted as P1 scope; the KEK ceremo
 | # | Action | Due |
 |---|---|---|
 | 1 | Tier-R dm-composition spike (A-1) | before P1 (gate) |
-| 2 | Resolve volume attach model (A-2) | PoC (kill criterion) |
+| 2 | ~~Resolve volume attach model (A-2)~~ | **resolved — dissolved by E-4** (CLH native block attach) |
 | 3 | Storage worker placement decision (A-4) | before P1 |
 | 4 | Key ceremony + KEK backup procedure (A-5) | P1 entry criterion |
 | 5 | Manager HA verification (A-8) | before claiming OPS-1 |
 | 6 | Operating model: users, staffing, SLA owners (B-1) | before P1 |
 | 7 | API specification (B-3) | before P0 control plane |
-| 8 | Kata project-health review cadence (A-6) | ongoing, OPS-10 |
-| 9 | Live-migration two-host spike + v1 runtime selection (A-9, E-3) | after PoC; before v1 commitment |
+| 8 | ~~Kata project-health review cadence (A-6)~~ | **closed by E-4** — replaced by CLH project-health cadence (OPS-10) |
+| 9 | Live-migration two-host spike on the direct-CLH stack (A-9, E-4) — RAM/state transfer + encrypted-volume cutover + PERF-13 under load | after PoC; before v1 commitment |
 | 10 | Ingress data-path design: per-host proxy + Exposure object (E-2) | before P1 |
+| 11 | Guest rootfs image for the direct-CLH runtime (kernel + initramfs + rootfs, signed, digest-pinned) | PoC scope (E-4) |
+| 12 | Minimal guest-agent design (exec, app-consistent seal) — only if a use case demands it | phase 2, on demand (E-4) |
 
 ---
 
@@ -216,3 +259,4 @@ Postgres backup + audit Merkle-head continuity noted as P1 scope; the KEK ceremo
 | E-1 | 2026-10-18 | **Stateful workloads are first-class v1 citizens** — any enterprise application (databases, app servers, queues); Windows guest OSes stay out of scope | doc 01 §1/§2/FR-30/OPS-2, doc 04 §2 |
 | E-2 | 2026-10-18 | **Ingress access is first-class v1** — still explicit/auditable/revocable, never on by default, never guest-controlled | doc 01 FR-20, doc 02 I-14/§7, doc 09 (Exposure) |
 | E-3 | 2026-10-18 | **Live migration is a v1 goal** (not PoC scope); **Kata is not a definitive choice** — runtime selection is a v1 gate with live migration as a criterion (A-9) | doc 01 FR-34/PERF-13/CT-5, doc 02 §4.5/§7/§8, doc 03 §4.1, doc 04 §2, doc 05 §7.1, doc 07 §3, doc 10 §5, doc 11 (migration terms) |
+| E-4 | 2026-10-18 | **Cloud Hypervisor, directly orchestrated, is the single runtime** — Kata and containerd are dropped from the data plane (A-9 resolution; A-2 dissolved; A-6 closed). Consequences: no guest agent in v1 (no exec; app-consistent seals deferred); host-agent gains the per-VM lifecycle role (C-1 partially returns, bounded); guest rootfs images built by the pipeline; SBOM = CLH + kernel + host-agent | doc 01 (SEC-5/8/12/32/40, CT-5), doc 02 §1/§3/§4/§5.6/§6/§7/§8, doc 03 (superseded, §6), doc 04 §3.4, doc 06 §5, doc 07 (PoC re-target), doc 10 §2/§5, doc 11 (sandbox) |
