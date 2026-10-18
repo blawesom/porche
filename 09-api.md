@@ -1,13 +1,16 @@
 # 09 — API: Object Catalog (CRUD + Main Attributes)
 
-Working document — v2, 2026-10-18. Resolves challenge B-3 (doc 08): the PORCHE API
+Working document — v3, 2026-10-18. Resolves challenge B-3 (doc 08): the PORCHE API
 specified as **objects with CRUD and main attributes** — deliberately at attribute level,
 not full OpenAPI, until P0 feedback. Fills out FR-40. **v2**: Exposure object added
-(ingress first-class v1 — E-2).
+(ingress first-class v1 — E-2). **v3 (E-8)**: two API surfaces — tenant and admin.
 
 Transport: HTTPS REST + gRPC mirror; AuthN per SEC-20 (short-lived tokens, rotation);
 every call audit-logged (SEC-23). Scope: every object and attribute is visible only to its
 owner (or, for platform objects, to platform operators) — view scoping per FR-14/SEC-16.
+**Two API surfaces (E-8)**: the **tenant API** and the **admin API** — separate authN
+domains, no surface spans both planes (FR-40/SEC-24); the object tables below mark
+operator-owned mutations where relevant.
 
 ---
 

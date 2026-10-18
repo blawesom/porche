@@ -1,9 +1,11 @@
 # 02 — Core Architecture Design (new orchestrator, incumbent design as reference)
 
-Working document — v5, 2026-10-18. Implements `01-requirements.md`.
+Working document — v6, 2026-10-18. Implements `01-requirements.md`.
 **v4** (doc 08 E-1..E-3): stateful workloads and ingress first-class v1; live migration
 is a v1 goal. **v5** (doc 08 E-4): **Cloud Hypervisor directly orchestrated — single
 runtime; Kata and containerd dropped** (§4, doc 08 A-9).
+**v6** (doc 08 E-8): **three-plane separation** — admin control plane / tenant control
+plane / workload data plane (§3.1).
 Simplification rationale: `03-simplification.md` (C-1..C-6, superseded in part by E-4 —
 see doc 03 §6).
 Storage durability tiers (local NVMe write-back + epoch sync, checkpoint semantics): `04-storage-tiers.md`.
@@ -84,18 +86,22 @@ Each improvement is traceable to a requirement (doc 01) and a root cause (assess
 ## 3. Target architecture
 
 ```
-            PORCHE control plane (new build — concepts from the incumbent design;
-            concrete middleware/languages = later software-architecture spec)
+            PORCHE control planes (new build — three-plane separation, E-8):
+              ADMIN plane (operators): fleet lifecycle, version registry/gates, pipeline
+              TENANT plane (users): API, orders, state, placement, metering
+            (concrete middleware/languages = later software-architecture spec)
   ┌───────────────────────────────────────────────────────────────────────────┐
   │  PORCHE API (objects per doc 09) ──► state store (pending calls, objects)  │
   │        command/query separation: API ── orders ──► agents                  │
   │        agents ── feedback/notification ──► API/consumers                    │
   │                                        │                                    │
-  │        + KMS service (volume DEK wrap/unwrap, workload tokens)             │
+  │        + KMS service (volume DEK wrap/unwrap, workload tokens) — shared          │
+  │          trust anchor, owned by neither plane (E-8)                          │
   │        + HostAllocation registry, placement views, affinity engine         │
   │          (scheduler candidates ⊆ owner's hosts; attract/repulse tags)      │
   └────────────────────────────────────────┼──────────────────────────────────┘
-                                           │ outbound mTLS, desired-state pull (I-11/I-12)
+                                           │ outbound mTLS, desired-state pull (I-11/I-12;
+                                           │ dual authority — admin lifecycle + tenant desired state, §3.1)
      ┌─────────────────────────────────────┼──────────────────────────────────┐
      │ host-agent (new code, C-4 + E-4 lifecycle role)  │   IaaS — bare metal hosts       │
      │   hardened immutable OS (I-6), CNI      │                                  │
@@ -114,6 +120,42 @@ Each improvement is traceable to a requirement (doc 01) and a root cause (assess
      │ NFS storage pool (kept) — LUKS2 envelopes, raw sparse inside (C-5)           │
      └───────────────────────────────────────────────────────────────────────────┘
 ```
+
+### 3.1 Three-plane separation (E-8)
+
+The deployment is **multitenant**: the control plane splits into two separately-trusted
+planes, and the workload data plane is separate from both.
+
+| Plane | Consumers | Owns | Never |
+|---|---|---|---|
+| **Admin control plane** | platform operators only | host fleet lifecycle (free pool, drain, reimage, decommission), version registry + deploy gates, image build pipeline, security monitoring, user/quota administration | holds tenant volume keys; sees tenant workload payloads |
+| **Tenant control plane** | tenants (authenticated, untrusted) | workload/volume/exposure/migration orchestration, placement views (scoped to own allocations), quota enforcement, metering | fleet-global views; host administration; any operator capability |
+| **Workload data plane** | the workloads themselves | hosts, microVMs, per-host ingress/egress proxies, storage shards | transits either control plane (I-14) |
+
+Cross-plane rules:
+
+1. **Authority separation on the host**: the host-agent holds **two authenticated
+   channels** — lifecycle authority (admin plane: drain, reimage, attest) and workload
+   desired state (tenant plane). Both reconcile into the **one desired-state table
+   (I-12)** with origin-tagged rows: admin orders gate tenant rows (drain wins) but can
+   never originate workload operations; tenant rows can never touch host lifecycle.
+2. **Blast radius**: compromise of the tenant plane yields at most tenant-scope authority
+   — the SEC-16 boundary extended to the control plane: no host administration, no keys
+   (KMS unwrap requires host identity, not plane privilege). Compromise of the admin
+   plane is operator-scope — contained by audit (SEC-23) and the escape runbook (OPS-10).
+3. **Availability decoupling**: admin plane down ⇒ hosts keep serving (lifecycle paused);
+   tenant plane down ⇒ no new workloads, running ones unaffected. Plane outage never
+   stops running workloads (host autonomy — the open state-authority arbitration must
+   preserve this).
+4. **KMS is the shared trust anchor** — used by both planes, owned by neither: workload
+   tokens (tenant plane), volume DEK wrap/unwrap (host path), host identity (admin
+   enrollment). The later software-architecture spec decomposes services **per plane**
+   (A-7's ≤3-services constraint now applies per plane, not globally).
+5. **Audit is unified** (SEC-23): one append-only Merkle chain records actions from both
+   planes — the separation is authority, not observability.
+6. **Allocation is the plane bridge**: `AllocateHost` is a tenant-plane operation
+   fulfilled from the admin-managed free pool — the only place tenant authority creates
+   claims on fleet resources (transactional placement, §1).
 
 ---
 

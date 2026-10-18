@@ -1,10 +1,10 @@
 # 11 — Glossary and Controlled-Language Rules
 
-Working document — v2, 2026-10-18. One word, one meaning — the lightweight controlled-English
+Working document — v3, 2026-10-18. One word, one meaning — the lightweight controlled-English
 contract (inspired by ASD-STE100, without its full cost; see doc 08 discussion). Applies to
 the whole corpus from this version on. Legacy uses that predate this glossary are superseded
 by the definitions below. **v2**: migration terms redefined — live migration is in scope
-as a v1 goal (E-3, doc 08).
+as a v1 goal (E-3, doc 08). **v3 (E-8)**: control plane split into planes.
 
 ---
 
@@ -53,7 +53,9 @@ In doc 01 (and wherever requirements are restated):
 | **host** | A bare metal machine (API object, doc 09). Always "host", never "server"/"node". | — |
 | **HostGroup** | A failure domain (rack / power / maintenance; doc 05 §1.2). | — |
 | **intake sandbox** | The restricted first-run sandbox for unvetted images (doc 02 §3.2). | — |
-| **control plane** | The PORCHE services (API, state, KMS) — software unspecified until the later architecture spec. | the legacy incumbent software |
+| **admin control plane** | The operator-only services: fleet lifecycle, version registry + deploy gates, image pipeline, security monitoring, user administration (E-8). | tenant-facing services (say *tenant control plane*) |
+| **tenant control plane** | The tenant-facing services: workload/volume/exposure orchestration, placement views, quotas, metering (E-8). | operator capability; fleet-global views |
+| **data plane** | The workload execution path: hosts, microVMs, per-host proxies, storage shards. Tenant traffic never transits a control plane (I-14). | control-plane traffic (orders, metrics, audit) |
 | **incumbent (design)** | The reference platform's design (doc 06 §4) — concepts only, no software. | anything PORCHE runs |
 
 ## 3. Writing rules (procedure documents, esp. doc 10)

@@ -1,10 +1,12 @@
 # 01 — Requirements Specification
 
-Working document — v3, 2026-10-18. First normative document of the PORCHE project.
-**v2 scope change** (doc 08 E-1..E-3): stateful enterprise workloads and ingress access
+Working document — v4, 2026-10-18. First normative document of the PORCHE project.
+**v2** (doc 08 E-1..E-3): stateful enterprise workloads and ingress access
 are first-class v1 citizens; live migration is a v1 goal.
 **v3** (doc 08 E-4): **Cloud Hypervisor, directly orchestrated, is the single runtime** —
 Kata and containerd are dropped from the data plane (CT-5).
+**v4** (doc 08 E-8): **three-plane separation** — admin control plane / tenant control
+plane / workload data plane.
 
 **Conventions (RFC 2119, doc 11 §1)**: every FR/SEC/PERF/OPS statement is **MUST** —
 normative, violation is a defect — unless explicitly marked **SHOULD** (deviation requires
@@ -34,7 +36,11 @@ tenant (platform enumeration, fingerprinting).
 - A platform where **stateful workloads are first-class citizens** (E-1): long-lived enterprise
   applications (databases, app servers, queues) run on persistent tier R/S volumes, serve
   ingress, and are **live-migratable** (v1 goal, E-3) for non-disruptive maintenance.
-- A control plane (API, scheduler, image pipeline, metering, observability).
+- Two control planes and a workload data plane (E-8): the **admin control plane** (host
+  fleet lifecycle, version registry, image pipeline, monitoring — operators only) and the
+  **tenant control plane** (workload/volume/exposure orchestration, placement views, quotas,
+  metering), plus the **workload data plane** (hosts, microVMs, per-host proxies, storage
+  shards — tenant traffic never transits a control plane).
 - A set of verifiable security guarantees (every SEC requirement is testable).
 
 ### 1.2 What PORCHE is not (non-goals)
@@ -161,8 +167,10 @@ tenant (platform enumeration, fingerprinting).
 
 ### 3.5 Control plane & operations
 
-- **FR-40** — Single API (REST/gRPC): workloads, quotas, images, hosts, metrics. AuthN via
-  limited-lifetime tokens; AuthZ via roles; every call logged.
+- **FR-40** — **Two API surfaces with separate authN domains (E-8)**: the **tenant API**
+  (workloads, volumes, exposures, quotas, placement views, metrics) and the **admin API**
+  (fleet, version registry, users) — REST/gRPC. AuthN via limited-lifetime tokens; AuthZ
+  via roles; every call logged. **No API surface spans both planes.**
 - **FR-41** — Per-workload metadata service (HTTP API inside the VM): exposes only the calling
   workload's own data, **upon presentation of a single-use token** (lesson R-F0.1 — never
   IMDSv1-style).
@@ -250,6 +258,13 @@ device model (E-4) uses **block devices only** — virtio-fs is not part of the 
   never in logs, never in another workload's metadata.
 - **SEC-23** — Append-only, signed audit log (Merkle chain); covers workload transitions,
   operator actions, scheduler decisions, security alerts.
+- **SEC-24** — **Plane separation (E-8)**: the tenant control plane holds **no operator
+  capability** — host administration, fleet-global views, registry writes, and user
+  management live in a separate admin plane with separate authentication. Compromise of
+  the tenant plane yields at most tenant-scope authority (the SEC-16 boundary extended to
+  the control plane); the KMS never grants unwrap on plane authority (host identity
+  required, not plane privilege). Availability is decoupled: an admin-plane or
+  tenant-plane outage never stops running workloads (host autonomy). [E-8]
 
 ### 4.4 Supply chain & patch management
 
