@@ -15,8 +15,8 @@ Dedicated host allocation, user placement views, attract/repulse resiliency: `05
 platform's design (summary and known weaknesses in doc 06 §4) is **reference and
 inspiration — we adopt design concepts, not software**. There is no legacy code to keep,
 extend, or migrate. **Software architecture, languages, and concrete control-plane
-middleware are not specified in this corpus** — they are a later specification; CT-2 in
-doc 01 remains guidance for that spec. What *is* fixed here: the security/performance
+middleware are specified in `12-software-architecture.md`** (E-9/E-10); CT-2 in
+doc 01 remains guidance that spec applies. What *is* fixed here: the security/performance
 model, the microVM isolation model, and the runtime: **Cloud Hypervisor, directly
 orchestrated** (E-4 — single VMM, no Kata, no containerd). The incumbent design is improved by:
 
@@ -41,7 +41,7 @@ The incumbent architecture is sound where it matters; the isolation assessment c
 the weaknesses are concentrated in the **data-plane execution path (QEMU) and protocol
 authentication**, not in the orchestration model. We adopt the following **concepts** in
 the new build (their concrete implementation — middleware, DB, service decomposition,
-languages — is the later software-architecture spec):
+languages — is `12-software-architecture.md`):
 
 | Incumbent concept | Verdict | Why adopt / reject |
 |---|---|---|
@@ -89,7 +89,7 @@ Each improvement is traceable to a requirement (doc 01) and a root cause (assess
             PORCHE control planes (new build — three-plane separation, E-8):
               ADMIN plane (operators): fleet lifecycle, version registry/gates, pipeline
               TENANT plane (users): API, orders, state, placement, metering
-            (concrete middleware/languages = later software-architecture spec)
+            (concrete middleware/languages = 12-software-architecture.md, E-9/E-10)
   ┌───────────────────────────────────────────────────────────────────────────┐
   │  PORCHE API (objects per doc 09) ──► state store (pending calls, objects)  │
   │        command/query separation: API ── orders ──► agents                  │
@@ -357,7 +357,7 @@ column is what the new orchestrator does instead. Nothing is reused as software.
 
 | Incumbent component | PORCHE (new build) | Change |
 |---|---|---|
-| Control plane (intel/manager/RMQ/Postgres/periodic) | **new control plane**, same concepts (CQS, multi-agent, pending calls, transactional placement) | re-specified in the later software-architecture spec; concept adoptions per §1 |
+| Control plane (intel/manager/RMQ/Postgres/periodic) | **new control plane**, same concepts (CQS, multi-agent, pending calls, transactional placement) | specified in `12-software-architecture.md` (E-9/E-10 — no bus in v1, three services); concept adoptions per §1 |
 | Public API surface | **PORCHE API** (objects per doc 09) | not carried over; only workloads, volumes, hosts, placement |
 | — | **KMS** (new) | volume DEK wrap/unwrap, workload tokens (I-2/I-4) |
 | per-VM VMM driver | **host-agent lifecycle role** (E-4 — bounded return of C-1) | direct CLH orchestration; no containerd, no shim |

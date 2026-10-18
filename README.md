@@ -37,8 +37,10 @@ the design.
 | 09 | [API](09-api.md) | Object catalog: CRUD + main attributes (User, Host, Allocation, Workload, Volume, Checkpoint, …) |
 | 10 | [upgrade & migration](10-upgrade-migration.md) | Operator runbook: host image/A-B reimage, canary rings, workload migration mechanics, failure handling |
 | 11 | [glossary](11-glossary.md) | Controlled-language contract: one word one meaning, RFC 2119 keywords, procedure writing rules |
+| 12 | [software architecture](12-software-architecture.md) | Control-plane and host-side software: state authority, order flow (no bus in v1), three services, Rust/tonic/sqlx, Postgres HA |
 
-Read order for a new session: **06 → 01 → 02**, then 03/04/05/07/08 as needed.
+Read order for a new session: **06 → 01 → 02**, then 03/04/05/07/08 as needed; the
+software architecture is **12** (after 02).
 
 ## Archive
 

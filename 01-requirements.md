@@ -7,6 +7,8 @@ are first-class v1 citizens; live migration is a v1 goal.
 Kata and containerd are dropped from the data plane (CT-5).
 **v4** (doc 08 E-8): **three-plane separation** — admin control plane / tenant control
 plane / workload data plane.
+**v5** (doc 08 E-9): FR-5 TTL re-scoped to per-workload-class policy (operator-waivable
+for stateful U4).
 
 **Conventions (RFC 2119, doc 11 §1)**: every FR/SEC/PERF/OPS statement is **MUST** —
 normative, violation is a defect — unless explicitly marked **SHOULD** (deviation requires
@@ -88,8 +90,10 @@ tenant (platform enumeration, fingerprinting).
 - **FR-4** — Guaranteed delay between "API accepts" and "process visible inside the guest":
   P50 < 1.5 s, P99 < 5 s (see PERF-1).
 - **FR-5** — Per-tenant quotas: vCPU, RAM, workload count, egress, **local NVMe space**,
-  **storage-network reservations (network tiers only)**, max lifetime (mandatory TTL,
-  non-waivable by default).
+  **storage-network reservations (network tiers only)**, max lifetime (mandatory TTL —
+  **policy per workload class** (E-9): enforced locally on the host, fail-safe under
+  partition; operator-waivable for stateful workloads (U4); never waivable by tenant
+  self-service).
 - **FR-6** — Console/stdio: access to stdout/stderr streams and a serial console, **recorded**
   (not just relayed) for execution audit. Mechanism (E-4): the workload's stdio is its
   serial console (virtio-console), recorded host-side. **Exec into a running workload is
