@@ -10,6 +10,8 @@ from the data plane. A-2, A-6, A-9 closed. **v4**: E-5 — Fedora CoreOS as the 
 host-OS upstream. **v5**: E-6 (wipe = crypto-erase only) and E-7 (PoC escape suite
 mapped to hardening controls). **v6**: E-8 — three-plane separation. **v7**: E-9
 (state authority, no bus in v1) and E-10 (3 services, Rust, Postgres HA) — doc 12 opened.
+**v8**: E-11 — Outscale integration environment (doc 13 opened). **v9**: E-12 —
+workload networking specified (doc 14 opened; C-6 superseded, F45 question closed).
 
 ---
 
@@ -248,7 +250,7 @@ Postgres backup + audit Merkle-head continuity noted as P1 scope; the KEK ceremo
 | 6 | Operating model: users, staffing, SLA owners (B-1) | before P1 |
 | 7 | API specification (B-3) | before P0 control plane |
 | 8 | ~~Kata project-health review cadence (A-6)~~ | **closed by E-4** — replaced by CLH project-health cadence (OPS-10) |
-| 9 | Live-migration two-host spike on the direct-CLH stack (A-9, E-4) — RAM/state transfer + encrypted-volume cutover + PERF-13 under load | after PoC; before v1 commitment |
+| 9 | Live-migration two-host spike on the direct-CLH stack (A-9, E-4) — RAM/state transfer + encrypted-volume cutover + PERF-13 under load | runs in the integration environment (doc 13) after PoC; before v1 commitment |
 | 10 | Ingress data-path design: per-host proxy + Exposure object (E-2) | before P1 |
 | 11 | Guest rootfs image for the direct-CLH runtime (kernel + initramfs + rootfs, signed, digest-pinned) | PoC scope (E-4) |
 | 12 | Minimal guest-agent design (exec, app-consistent seal) — only if a use case demands it | phase 2, on demand (E-4) |

@@ -392,5 +392,6 @@ column is what the new orchestrator does instead. Nothing is reused as software.
       SI = one place to audit.)
 - [ ] Image pull latency vs PERF-1: per-host pull-through cache sizing, and whether guest
       rootfs should be pre-seeded on the host image for the base catalog (decided in P0).
-- [ ] Multi-tenant L2 on the adopted fabric/VPC model: revisit VLAN-tag trust (F45 used a
-      2-VLAN-tag bypass in a lab PoC).
+- [x] ~~Multi-tenant L2 on the adopted fabric/VPC model: revisit VLAN-tag trust (F45 used
+      a 2-VLAN-tag bypass in a lab PoC).~~ — **resolved by doc 14 §9**: no VLANs in the
+      workload path at all; native netns + isolated bridge ports carry the isolation.

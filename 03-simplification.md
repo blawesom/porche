@@ -164,8 +164,9 @@ architecture; the principle survives, the conclusion inverts:
 - **C-3** (metadata token) — stands unchanged.
 - **C-4** (host-agent scope) — *extended*: it gains the per-VM lifecycle role (E-4).
 - **C-5** (raw sparse in LUKS2) — stands unchanged.
-- **C-6** (CNI networking) — stands; CNI is driven by the host-agent, independent of
-  containerd.
+- **C-6** (CNI networking) — *superseded (E-4/doc 14)*: native netns/veth/bridge in the
+  host-agent; CNI existed to standardize container-runtime integration that no longer
+  exists. The host-agent's netlink module replaces the plugin ecosystem.
 
 **The deeper simplification (doc 02 v5)**: this document asked "which incumbent glue
 does upstream Kata replace?" E-4 asks the better question — "which *intermediary layers*
