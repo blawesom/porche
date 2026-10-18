@@ -79,7 +79,7 @@ Each improvement is traceable to a requirement (doc 01) and a root cause (assess
 | I-11 | **Outbound-only host-agent** (fuse pattern): hosts dial the control plane over mTLS, zero inbound ports on hosts — the inter-host fabric is hostile and no control relies on it | inbound-facing host agents | SEC-20; zero-trust fabric (doc 02 §8 discussion) |
 | I-12 | **Desired-state reconciliation** (flintlock pattern): host-agent converges to a desired-state table, not push-only orders — replaces missed-order/rejoin/drift machinery | fire-and-forget push orders | OPS-2/3, FR-12 |
 | I-13 | **One binary, multiple roles** (E2B pattern): host-agent, storage worker, build worker = subcommands of one audited binary | separate services per role | CT-3, SEC-30 |
-| I-14 | **Standing rules**: workload traffic never transits the control plane (ingress = per-host proxy, **first-class v1** — E-2, Exposure object in doc 09); every artifact pinned by digest (kernel, runtime, images) in the version registry | control-plane-relayed data path; floating tags | SEC-30/31, FR-20 |
+| I-14 | **Standing rules**: workload traffic never transits the control plane (ingress = per-host proxy, **first-class v1** — E-2, IngressRule object in doc 09); every artifact pinned by digest (kernel, runtime, images) in the version registry | control-plane-relayed data path; floating tags | SEC-30/31, FR-20 |
 
 ---
 
@@ -129,7 +129,7 @@ planes, and the workload data plane is separate from both.
 | Plane | Consumers | Owns | Never |
 |---|---|---|---|
 | **Admin control plane** | platform operators only | host fleet lifecycle (free pool, drain, reimage, decommission), version registry + deploy gates, image build pipeline, security monitoring, user/quota administration | holds tenant volume keys; sees tenant workload payloads |
-| **Tenant control plane** | tenants (authenticated, untrusted) | workload/volume/exposure/migration orchestration, placement views (scoped to own allocations), quota enforcement, metering | fleet-global views; host administration; any operator capability |
+| **Tenant control plane** | tenants (authenticated, untrusted) | workload/volume/network-rule (ingress/egress/security-group)/migration orchestration, placement views (scoped to own allocations), quota enforcement, metering | fleet-global views; host administration; any operator capability |
 | **Workload data plane** | the workloads themselves | hosts, microVMs, per-host ingress/egress proxies, storage shards | transits either control plane (I-14) |
 
 Cross-plane rules:

@@ -1,10 +1,10 @@
 # 14 — Workload Networking: Data Path, Management, Isolation
 
 Working document — v1, 2026-10-18. Specifies the workload network: the per-host data
-path, addressing and routing, egress and ingress (Exposure), enforcement and isolation
+path, addressing and routing, egress and ingress (IngressRule/EgressRule), enforcement and isolation
 rules, and the management flow. It resolves the last open data-path questions: C-6's CNI
 adoption (superseded — native netns), the F45 VLAN-trust question (doc 02 §8), and the
-Exposure enforcement point (I-14).
+IngressRule enforcement point (I-14).
 
 Implements: FR-20/21/22, SEC-7/24, I-7/I-14, E-2 (ingress first-class), E-8 (planes).
 Adversary model (doc 01 §0): the compromised workload itself — it attacks the host, its
@@ -23,7 +23,7 @@ neighbors, and tries to bypass the control plane.
 3. **Routed /32, no overlay.** Each workload holds one /32 from its user's VPC CIDR. No
    VXLAN/Geneve, no bridges spanning hosts. L2 exists exactly inside one host.
 4. **Every byte crosses an enforcement point we own.** Egress: transparent per-host proxy.
-   Ingress: per-host proxy listener (Exposure). Nothing is hairpinned past rules.
+   Ingress: per-host proxy listener (IngressRule). Nothing is hairpinned past rules.
 5. **Desired-state programmed, idempotent.** All dataplane objects (netns, veth, bridge
    ports, nft rules, tc shapers, routes) converge from the desired-state table (I-12) —
    a rebooted or drifted host rebuilds identical state.
@@ -44,7 +44,7 @@ neighbors, and tries to bypass the control plane.
    │    route 169.254.169.254/32 → metadata-proxy (C-3, token-gated)
    │
    ├─ egress-proxy  (host-agent module: allow-list per workload, NAT)
-   ├─ ingress-proxy (host-agent module: Exposure listeners — §5)
+   ├─ ingress-proxy (host-agent module: IngressRule listeners — §5)
    └─ fabric interfaces: control (mTLS out, I-11), workload fabric, storage net (FR-30)
 ```
 
@@ -75,7 +75,7 @@ neighbors, and tries to bypass the control plane.
   rows distributed by the tenant plane. No overlay, no BGP in v1 (fleet ≤ ~1,000 hosts,
   static routing suffices); BGP is a later scale seam behind the same route table.
 - **Migration cutover** (doc 12 §6): target ready → **route switch** (withdraw on source,
-  add on target, atomic in the state store) → Exposure listeners follow → source teardown.
+  add on target, atomic in the state store) → IngressRule listeners follow → source teardown.
   The /32 moves with the workload; connections re-establish through the ingress proxy.
 - **Anti-spoof** (control-plane-enforced, never guest-cooperative): nftables in `w-<id>`
   accepts from the tap only the assigned source MAC and IP — everything else drops.
@@ -93,8 +93,8 @@ identical for user-defined and platform-allocated ranges.
 
 1. Default route from the netns → root ns.
 2. nft **transparent redirect** (tcp/udp) → per-host **egress proxy** (host-agent module,
-   L4, tokio): per-workload allow-list (FQDN or CIDR per tenant policy), then NAT with
-   the host egress address.
+   L4, tokio): **EgressRule objects** (doc 09 — per-workload, or the VPC default) define
+   the allow-list (FQDN or CIDR), then NAT with the host egress address.
 3. **Shaping**: token bucket on the veth pair (both directions), rate from the tenant
    quota (FR-22) — enforced by tc, reported like any host fact.
 4. DNS: resolved **by the proxy** (allow-list applies to names, not just IPs) — the guest
@@ -102,10 +102,11 @@ identical for user-defined and platform-allocated ranges.
 5. No split tunneling, no exceptions path: an empty allow-list means no egress, and the
    workload cannot change that (E-2 logic applied to egress).
 
-## 5. Ingress (E-2 — Exposure)
+## 5. Ingress (E-2 — IngressRule)
 
-1. `Exposure` object (doc 09) → desired state → the **ingress proxy** on the hosting
-   host opens a listener `host-fabric-ip:<external_port>` → forwards to `wip:guest_port`.
+1. `IngressRule` object (doc 09) → desired state → the **ingress proxy** on the hosting
+   host opens a listener `host-fabric-ip:<external_port>` → forwards to `wip:guest_port`,
+   with the rule's **`source_cidrs` filter applied at the listener** (default 0.0.0.0/0).
 2. The proxy **is** the enforcement point (I-14): every connection is logged (SEC-23
    events), revocation closes the listener immediately, and no DNAT rule exists that
    could bypass it.
@@ -114,16 +115,16 @@ identical for user-defined and platform-allocated ranges.
 4. L7 features (TLS termination, host routing) are phase-2 — v1 is L4; the proxy module
    boundary is where L7 lands if ever needed.
 
-## 6. Security groups (VPC model, adopted v1)
+## 6. Security groups (VPC model, adopted v1 — the `SecurityGroup` object, doc 09)
 
-Tenant-authored rules (ports/protocols/CIDRs) compile to nftables chains **inside
-`w-<id>`** — same direction as every other rule: control plane programs, guest cannot
-reach the firewall. Default: deny inbound (only Exposure listeners open anything),
-allow-listed egress.
+Tenant-authored rules (ports/protocols/CIDRs) — the **SecurityGroup** object — compile
+to nftables chains **inside `w-<id>`** — same direction as every other rule: control
+plane programs, guest cannot reach the firewall. Default: deny inbound (only IngressRule
+listeners open anything), east-west deny, egress only via EgressRule.
 
 ## 7. Management flow
 
-- Desired-state rows: `netns(veth, tap, mac, ip, gw, rates, sg-rules, exposures)` per
+- Desired-state rows: `netns(veth, tap, mac, ip, gw, rates, sg-rules, ingress rules)` per
   workload. The host-agent converges: create/teardown netns with the VM lifecycle (FR-3 —
   netns teardown is part of deterministic teardown), reprogram tc/nft on quota change.
 - **Drift is impossible to miss**: convergence runs continuously (I-12); a rule that
@@ -138,7 +139,7 @@ allow-listed egress.
 | IP/MAC spoofing | netns nft anti-spoof — control-plane enforced |
 | Offload/device-model exploit (F45/PwnEscape) | SEC-7 offload policy at virtio-net and tap; frozen device model |
 | Egress abuse / exfiltration | transparent proxy + name-level allow-list + token bucket |
-| Ingress widening | Exposure is an API object only (E-2); proxy is the sole path; no DNAT |
+| Ingress widening | IngressRule is an API object only (E-2); proxy is the sole path; no DNAT |
 | Metadata attack (F0.1/F17) | 169.254.169.254 → proxy + single-use boot token (C-3) |
 | Self-DoS / neighbor DoS (F31/F44) | tc both directions per workload + per-netns limits (OPS-4) |
 | Fabric/VLAN games (F45) | no VLANs in the workload path at all |

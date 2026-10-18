@@ -14,7 +14,7 @@ state store. It does **not** re-open the plane model (E-8, doc 02 §3.1) or the 
 
 | Concern | Owner | Mechanism |
 |---|---|---|
-| Desired state (workloads, volumes, exposures, allocations) | control plane | objects + pending calls in the state store, transactional |
+| Desired state (workloads, volumes, network rules, allocations) | control plane | objects + pending calls in the state store, transactional |
 | Reported state (running, stopped, failed, migrated) | host | reports over the host channel; never trusted where security matters (report/attest split, doc 08 A-3) |
 | TTL + quota enforcement under partition | host | enforced locally — fail-safe: the host knows the TTL; no control-plane lease is required to keep running |
 | Convergence | host | reconciliation to desired state (I-12) |

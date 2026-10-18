@@ -44,7 +44,9 @@ In doc 01 (and wherever requirements are restated):
 | **checkpoint migration** | Stop a workload + place it anew + start it (checkpoint-carrying for tiers R/S). The default mechanism, all tiers. | live migration |
 | **live migration** | VMM-level transfer of a running workload; the guest sees only the cutover pause. Stateful workloads — v1 goal (E-3). | checkpoint migration |
 | **cutover** | The user-visible downtime window of one migration (for live migration: the pause at switchover). | — |
-| **exposure** | The API object that grants inbound access to one workload port (doc 09). Created and revoked through the control API only — never from the guest. | guest-initiated port opening, firewall-rule edits from inside the workload |
+| **ingress rule** | The API object that allows inbound access to one workload port from a source range (doc 09 — IngressRule). Created and revoked through the control API only — never from the guest. | guest-initiated port opening, firewall edits from inside the workload |
+| **egress rule** | The API object that allows outbound internet access to one destination — FQDN or CIDR (doc 09 — EgressRule). Enforced by the egress proxy, DNS included. | intra-VPC rules (say *security group*) |
+| **security group** | The API object holding east-west rules within a VPC (doc 09 — SecurityGroup). Compiled to netns nftables. | internet-facing rules (say *ingress rule* / *egress rule*) |
 | **allocation** | The binding of one host to one user (SEC-16; doc 05). | — |
 | **tier** | Volume durability: E / R / S (doc 04). Nothing else is a tier. | performance level, storage location |
 | **class** | Storage location/cost of a remote copy: hot / cold (doc 04 §2.2). | durability (say *tier*) |
@@ -54,7 +56,7 @@ In doc 01 (and wherever requirements are restated):
 | **HostGroup** | A failure domain (rack / power / maintenance; doc 05 §1.2). | — |
 | **intake sandbox** | The restricted first-run sandbox for unvetted images (doc 02 §3.2). | — |
 | **admin control plane** | The operator-only services: fleet lifecycle, version registry + deploy gates, image pipeline, security monitoring, user administration (E-8). | tenant-facing services (say *tenant control plane*) |
-| **tenant control plane** | The tenant-facing services: workload/volume/exposure orchestration, placement views, quotas, metering (E-8). | operator capability; fleet-global views |
+| **tenant control plane** | The tenant-facing services: workload/volume/network-rule (ingress/egress/security-group) orchestration, placement views, quotas, metering (E-8). | operator capability; fleet-global views |
 | **data plane** | The workload execution path: hosts, microVMs, per-host proxies, storage shards. Tenant traffic never transits a control plane (I-14). | control-plane traffic (orders, metrics, audit) |
 | **incumbent (design)** | The reference platform's design (doc 06 §4) — concepts only, no software. | anything PORCHE runs |
 

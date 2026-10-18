@@ -4,6 +4,8 @@ Working document — v3, 2026-10-18. Resolves challenge B-3 (doc 08): the PORCHE
 specified as **objects with CRUD and main attributes** — deliberately at attribute level,
 not full OpenAPI, until P0 feedback. Fills out FR-40. **v2**: Exposure object added
 (ingress first-class v1 — E-2). **v3 (E-8)**: two API surfaces — tenant and admin.
+**v4 (E-14)**: Exposure renamed **IngressRule** (+ `source_cidrs`); **EgressRule** and
+**SecurityGroup** objects added.
 
 Transport: HTTPS REST + gRPC mirror; AuthN per SEC-20 (short-lived tokens, rotation);
 every call audit-logged (SEC-23). Scope: every object and attribute is visible only to its
@@ -60,7 +62,7 @@ operator-owned mutations where relevant.
 ### Workload
 | | |
 |---|---|
-| Attributes | `id`, `user`, `image` (digest), `command`, `volumes` (refs), `vcpu`, `ram`, `affinity_tags`, `ttl`, `state` (pending/scheduled/starting/running/stopped/failed/reaped), `placement` (host, reason — incl. pending cause), `exposures` (refs), `console_ref`, `events` |
+| Attributes | `id`, `user`, `image` (digest), `command`, `volumes` (refs), `vcpu`, `ram`, `affinity_tags`, `ttl`, `state` (pending/scheduled/starting/running/stopped/failed/reaped), `placement` (host, reason — incl. pending cause), `ingress_rules`, `security_groups` (refs), `console_ref`, `events` |
 | CRUD | create (FR-1), read (own, incl. `GetPlacementDecisions`, `GetResilienceReport` projections), update (limited: stop/start, migrate — FR-34, re-tag), delete (deterministic teardown FR-3) |
 
 ### Volume
@@ -75,13 +77,29 @@ operator-owned mutations where relevant.
 | Attributes | `id`, `volume`, `sealed_at`, `epoch`, `size`, `class` (hot/cold), `retention` |
 | CRUD | create (`SyncVolume` — FR-33, opt-in app-consistent), read (list, own), update (retention), delete (release) |
 
-### Exposure
+### IngressRule
 
 | | |
 |---|---|
-| Attributes | `id`, `user`, `workload`, `protocol` (tcp/udp), `guest_port`, `external_addr`, `state` (active/revoked), `created_at`, `revoked_at` |
+| Attributes | `id`, `user`, `workload`, `protocol` (tcp/udp), `guest_port`, `external_port`, `source_cidrs` (default 0.0.0.0/0), `state` (active/revoked), `created_at`, `revoked_at` |
 | CRUD | create (explicit, auditable — FR-20), read (own), update (revoke), delete (revoke) |
-| Notes | first-class v1 (E-2); created/changed/revoked through the control API only — the guest has no path to modify an exposure; enforced by the per-host data path (I-14); revocation is immediate and auditable |
+| Notes | inbound access from outside the VPC; enforced by the per-host ingress proxy (I-14) — a revoked rule means **no listener exists**; created/changed/revoked through the control API only, never from the guest (E-2) |
+
+### EgressRule
+
+| | |
+|---|---|
+| Attributes | `id`, `user`, `vpc`, `workload` (nullable — null = VPC default), `destination` (fqdn | cidr), `protocol`, `port`, `state` (active/revoked) |
+| CRUD | create, read (own), update (revoke), delete (revoke) |
+| Notes | outbound internet access; enforced by the transparent egress proxy — **DNS is resolved by the proxy**, so FQDN rules cannot be bypassed by raw IP (doc 14 §4); empty set + no VPC default = no egress |
+
+### SecurityGroup
+
+| | |
+|---|---|
+| Attributes | `id`, `user`, `vpc`, `name`, `rules[]` (direction in/out, protocol, from/to port, cidr — within the user's VPC CIDR) |
+| CRUD | create, read (own), update (rules), delete (when unreferenced) |
+| Notes | east-west, workload ↔ workload within the VPC; attached to workloads at create (attachment immutable per workload in v1, like volumes); compiled to netns nftables (doc 14 §6); default deny |
 
 ### Image
 | | |

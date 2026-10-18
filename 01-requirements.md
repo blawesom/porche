@@ -40,7 +40,7 @@ tenant (platform enumeration, fingerprinting).
   ingress, and are **live-migratable** (v1 goal, E-3) for non-disruptive maintenance.
 - Two control planes and a workload data plane (E-8): the **admin control plane** (host
   fleet lifecycle, version registry, image pipeline, monitoring — operators only) and the
-  **tenant control plane** (workload/volume/exposure orchestration, placement views, quotas,
+  **tenant control plane** (workload/volume/network-rule orchestration, placement views, quotas,
   metering), plus the **workload data plane** (hosts, microVMs, per-host proxies, storage
   shards — tenant traffic never transits a control plane).
 - A set of verifiable security guarantees (every SEC requirement is testable).
@@ -122,13 +122,14 @@ tenant (platform enumeration, fingerprinting).
 
 ### 3.3 Networking
 
-- **FR-20** — Default egress NAT through an **authenticated, filtered** proxy (per-tenant/
-  workload allow-list); **no ingress by default**, but ingress exposure is a **first-class
-  v1 capability** (E-2): every exposure is an explicit, auditable, revocable API object
-  (doc 09 — Exposure), enforced by the per-host data path, never by guest cooperation.
-  Exposures are created, changed, and revoked **through the control API only** — the guest
-  has no path to open, alter, or close one (a compromised workload cannot widen its own
-  ingress surface).
+- **FR-20** — Default egress NAT through an **authenticated, filtered** proxy governed by
+  **EgressRule objects** (doc 09: per-workload or VPC-default allow-list of FQDNs/CIDRs;
+  DNS resolved by the proxy — a name rule cannot be bypassed by raw IP); **no ingress by
+  default**, but inbound access is a **first-class v1 capability** (E-2) governed by
+  **IngressRule objects** (doc 09): explicit, auditable, revocable, enforced by the
+  per-host data path, never by guest cooperation. Both rule types are created, changed,
+  and revoked **through the control API only** — the guest has no path to open, alter, or
+  close one (a compromised workload cannot widen its own network surface).
 - **FR-21** — Strict L2 isolation between workloads (netns per VM, no bridge shared between
   tenants); verifiable by test (see SEC-30).
 - **FR-22** — Per-workload egress bandwidth cap (token bucket); the cap is enforced by the
@@ -178,7 +179,7 @@ tenant (platform enumeration, fingerprinting).
 ### 3.5 Control plane & operations
 
 - **FR-40** — **Two API surfaces with separate authN domains (E-8)**: the **tenant API**
-  (workloads, volumes, exposures, quotas, placement views, metrics) and the **admin API**
+  (workloads, volumes, ingress/egress rules, security groups, quotas, placement views, metrics) and the **admin API**
   (fleet, version registry, users) — REST/gRPC. AuthN via limited-lifetime tokens; AuthZ
   via roles; every call logged. **No API surface spans both planes.**
 - **FR-41** — Per-workload metadata service (HTTP API inside the VM): exposes only the calling
