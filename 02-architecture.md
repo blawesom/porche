@@ -149,7 +149,7 @@ Cross-plane rules:
    preserve this).
 4. **KMS is the shared trust anchor** — used by both planes, owned by neither: workload
    tokens (tenant plane), volume DEK wrap/unwrap (host path), host identity (admin
-   enrollment). The later software-architecture spec decomposes services **per plane**
+   enrollment). `12-software-architecture.md` decomposes services **per plane**
    (A-7's ≤3-services constraint now applies per plane, not globally).
 5. **Audit is unified** (SEC-23): one append-only Merkle chain records actions from both
    planes — the separation is authority, not observability.

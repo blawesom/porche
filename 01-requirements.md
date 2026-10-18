@@ -352,9 +352,9 @@ blocks the release.
 
 - **CT-1** — Hardware: x86_64 servers with KVM (VT-x), ≥ 64 GB RAM; IOMMU (VT-d) required for
   the GPU phase. ARM64: opportunistic, not blocking.
-- **CT-2** — Languages: **deferred to the later software-architecture spec**. Guidance for
-  that spec: Rust preferred for anything handling untrusted input; Go acceptable for
-  tooling; C forbidden outside audited components.
+- **CT-2** — Languages: **specified in `12-software-architecture.md` (E-10): Rust
+  everywhere**. Guidance retained: Rust for anything handling untrusted input;
+  Go acceptable for tooling; C forbidden outside audited components.
 - **CT-3** — Small team: the design must minimize the amount of in-house "glue" components
   that need continuous security auditing (lesson from doc 06 §5: glue code is the risk
   when leaving an integrated stack).
