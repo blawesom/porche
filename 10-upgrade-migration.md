@@ -27,7 +27,7 @@ the process is **user-action-free** (users see effects, never perform steps).
 
 | Item | Content |
 |---|---|
-| Host image (the unit of upgrade) | host OS rootfs + kernel + CLH + host-agent + config — one digest |
+| Host image (the unit of upgrade) | host OS rootfs + kernel + CLH + host-agent + config — one digest (a lean Fedora CoreOS derivative, E-5; the A/B slots map to rpm-ostree deployments — upstream machinery, not in-house glue) |
 | A/B slots | two rootfs partitions per host: active + spare; upgrade writes the spare, boots once into it, commits on attestation; bootloader falls back to the previous slot on failure |
 | Version registry | per host: current digest, attestation result, upgrade history; per fleet: which hosts run which digest (drives ring selection and targeted emergency rollout) |
 | Guest images | independent of host upgrades — workloads are unaffected by the host image change except for the reboot/migration itself |

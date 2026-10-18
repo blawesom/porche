@@ -1,8 +1,9 @@
 # 07 — PoC Scope (pre-P0)
 
-Working document — v3, 2026-10-18. **v2**: live migration explicitly deferred (v1 goal,
+Working document — v4, 2026-10-18. **v2**: live migration explicitly deferred (v1 goal,
 not PoC scope — E-3). **v3 (E-4)**: PoC re-targeted to **direct Cloud Hypervisor
-orchestration** — no containerd, no Kata. Defines the **first proof of concept**: the smallest
+orchestration** — no containerd, no Kata. **v4 (E-5)**: PoC host = **Fedora CoreOS,
+stable stream** — the tracked upstream. Defines the **first proof of concept**: the smallest
 buildable system that validates the riskiest technical bets of the design. Everything not
 listed in scope is **deferred by decision**, not forgotten — see §3.
 
@@ -28,7 +29,7 @@ not after building a control plane around it.
 
 | Item | Content | Validates |
 |---|---|---|
-| 1 bare metal host | stock distro + kernel hardening **sysctls only** (io_uring off, userns off, core_pattern, modules_disabled) | SEC-11 subset |
+| 1 bare metal host | **Fedora CoreOS, stable stream** (E-5 — the tracked upstream: PERF and hardening numbers are measured on the actual production base) + kernel hardening **sysctls only** (io_uring off, userns off, core_pattern, modules_disabled) | SEC-11 subset |
 | **Cloud Hypervisor (direct)** | host-agent drives CLH over its local API — no containerd, no shim, no annotations (E-4); devices from the frozen allow-list (SEC-3), resource ceilings in VM config (I-9) | I-1, SEC-3/5 |
 | Guest image | minimal rootfs built in-house (kernel + initramfs + rootfs running the workload command), pinned by digest — the signing pipeline is P0 (doc 08 action 11) | FR-31 subset |
 | **host-agent skeleton** (the only new code) | CLI, 4 verbs: `create / status / stop / wipe`. **CLH API client** + `cryptsetup open` + teardown wipe. Written as the **role-neutral core of the one binary** (I-13) and shaped for **reconciliation** (I-12: verbs operate on a local desired-state table, so the P0 control plane replaces the CLI writer, not the agent) | C-4 shape, I-11..13 |

@@ -6,7 +6,8 @@ decided, the challenge, verdict ( upheld / needs change / open ), and the action
 Verdicts marked **needs change** are applied to the docs in the same commit.
 **v2**: A-9, E-1..E-3, B-2 amendment (live migration in scope as a v1 goal).
 **v3**: E-4 — direct Cloud Hypervisor as the single runtime; Kata and containerd dropped
-from the data plane. A-2, A-6, A-9 closed.
+from the data plane. A-2, A-6, A-9 closed. **v4**: E-5 — Fedora CoreOS as the tracked
+host-OS upstream.
 
 ---
 
@@ -249,6 +250,7 @@ Postgres backup + audit Merkle-head continuity noted as P1 scope; the KEK ceremo
 | 10 | Ingress data-path design: per-host proxy + Exposure object (E-2) | before P1 |
 | 11 | Guest rootfs image for the direct-CLH runtime (kernel + initramfs + rootfs, signed, digest-pinned) | PoC scope (E-4) |
 | 12 | Minimal guest-agent design (exec, app-consistent seal) — only if a use case demands it | phase 2, on demand (E-4) |
+| 13 | Lean FCOS derivative compose (coreos-assembler): strip container tooling, add CLH + host-agent + hardening config; signed, digest-pinned | before P0 (E-5) |
 
 ---
 
@@ -260,3 +262,4 @@ Postgres backup + audit Merkle-head continuity noted as P1 scope; the KEK ceremo
 | E-2 | 2026-10-18 | **Ingress access is first-class v1** — still explicit/auditable/revocable, never on by default, never guest-controlled | doc 01 FR-20, doc 02 I-14/§7, doc 09 (Exposure) |
 | E-3 | 2026-10-18 | **Live migration is a v1 goal** (not PoC scope); **Kata is not a definitive choice** — runtime selection is a v1 gate with live migration as a criterion (A-9) | doc 01 FR-34/PERF-13/CT-5, doc 02 §4.5/§7/§8, doc 03 §4.1, doc 04 §2, doc 05 §7.1, doc 07 §3, doc 10 §5, doc 11 (migration terms) |
 | E-4 | 2026-10-18 | **Cloud Hypervisor, directly orchestrated, is the single runtime** — Kata and containerd are dropped from the data plane (A-9 resolution; A-2 dissolved; A-6 closed). Consequences: no guest agent in v1 (no exec; app-consistent seals deferred); host-agent gains the per-VM lifecycle role (C-1 partially returns, bounded); guest rootfs images built by the pipeline; SBOM = CLH + kernel + host-agent | doc 01 (SEC-5/8/12/32/40, CT-5), doc 02 §1/§3/§4/§5.6/§6/§7/§8, doc 03 (superseded, §6), doc 04 §3.4, doc 06 §5, doc 07 (PoC re-target), doc 10 §2/§5, doc 11 (sandbox) |
+| E-5 | 2026-10-18 | **Fedora CoreOS is the tracked host-OS upstream** — criteria: lightest *maintained* base, stable stream discipline, fastest kernel-CVE cadence (biweekly atomic updates on a fresh line, ≥ 6.6 for `io_uring_disabled`). Immutable/atomic (rpm-ostree A/B — doc 10's slot model uses upstream machinery), SELinux enforcing by default (SEC-12), Ignition reproducible provisioning. Production image = **lean coreos-assembler derivative** (container tooling stripped; CLH + host-agent added — doc 08 action 13). PoC runs the **stock stable stream**. Fallback: **Flatcar** (switch trigger: FCOS stream churn operationally too hot at fleet scale; comparison per doc 11 §4). Rejected: **Bottlerocket** (ships two containerd instances + orchestrator-agent model — E-4 violation), classic distros (no native immutable A/B; slower kernel lines) | doc 07 §2 (PoC host), doc 02 I-6, doc 10 §2 (image contents) |

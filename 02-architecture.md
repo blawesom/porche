@@ -69,7 +69,7 @@ Each improvement is traceable to a requirement (doc 01) and a root cause (assess
 | I-3 | **No host↔guest protocol at all** (C-2, superseded by E-4) — no guest agent, no channel, no key-adoption surface exists | incumbent driver adopts guest-chosen key (F42) | SEC-8, F42 |
 | I-4 | **Metadata token auth** (C-3) — single-use, per-boot, boot-injected token; no identity from headers/network position | metadata trusts requester position | SEC-21, F0.1, F17 |
 | I-5 | **Version registry + no-EOL policy + CVE feed as deploy gate** | unobservable patch status (F27) | SEC-30/31/32, F43 root cause |
-| I-6 | **Host kernel hardening + immutable host OS** (io_uring off, userns off, modules_disabled, verified boot) | mutable hypervisor OS | SEC-10/11 |
+| I-6 | **Host kernel hardening + immutable host OS** (io_uring off, userns off, modules_disabled, verified boot) — base: lean Fedora CoreOS derivative (E-5) | mutable hypervisor OS | SEC-10/11 |
 | I-7 | **Network offload policy per workload class** (csum/TSO off for untrusted) | always-on offloads | SEC-7, F45 |
 | I-8 | **CI attack suite as deploy gate** | none | SEC-40 |
 | I-9 | **Resource envelopes per workload** (cgroup, fds, I/O caps) | per-VM QEMU without envelope | OPS-4, F31/F44 self-DoS |
