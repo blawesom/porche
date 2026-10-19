@@ -17,42 +17,74 @@ use porche_core::{ops, DesiredStateStore, Markers, Record, VolumeSpec, WorkloadS
 use std::sync::Arc;
 
 pub fn router(state: Arc<AppState>) -> Router {
-    Router::new()
-        .route("/", get(|| async { Redirect::to("/w") }))
-        .route("/w", get(workloads))
-        .route("/w/new", get(create_form).post(create_submit))
-        .route("/w/{id}", get(workload_detail))
-        .route("/w/{id}/console", get(console_tail))
-        .route("/w/{id}/stop", post(stop_workload))
-        .route("/w/{id}/wipe", post(wipe_workload))
-        .route("/a", get(fleet))
-        .route("/a/audit", get(audit_page))
-        .route("/htmx.js", get(htmx_js))
-        .layer(axum::middleware::from_fn_with_state(
-            state.clone(),
-            auth_mw,
-        ))
-        .with_state(state)
+    // every route (and template link) rides the base path — the console can be
+    // served at / (local) or under a path prefix behind a proxy (E-28 deploy)
+    let b = state.base.clone();
+    let root_base = state.base.clone();
+    let root = move || async move { Redirect::to(&format!("{root_base}/w")) };
+    let r = Router::new()
+        .route(&format!("{b}/w"), get(workloads))
+        .route(&format!("{b}/w/new"), get(create_form).post(create_submit))
+        .route(&format!("{b}/w/{{id}}"), get(workload_detail))
+        .route(&format!("{b}/w/{{id}}/console"), get(console_tail))
+        .route(&format!("{b}/w/{{id}}/stop"), post(stop_workload))
+        .route(&format!("{b}/w/{{id}}/wipe"), post(wipe_workload))
+        .route(&format!("{b}/a"), get(fleet))
+        .route(&format!("{b}/a/audit"), get(audit_page))
+        .route(&format!("{b}/htmx.js"), get(htmx_js));
+    let r = if b.is_empty() {
+        r.route("/", get(root))
+    } else {
+        let root2 = root.clone();
+        r.route(b.as_str(), get(root)).route(format!("{b}/").as_str(), get(root2))
+    };
+    r.layer(axum::middleware::from_fn_with_state(
+        state.clone(),
+        auth_mw,
+    ))
+    .with_state(state)
 }
 
 // --- auth (stage 1): optional bearer token; the planes bring real domains ---
 
+const COOKIE: &str = "porche_token";
+
 async fn auth_mw(State(app): State<Arc<AppState>>, req: Request<axum::body::Body>, next: Next) -> Response {
-    if let Some(want) = &app.token {
-        let header_ok = req
-            .headers()
-            .get(header::AUTHORIZATION)
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.strip_prefix("Bearer "))
-            .is_some_and(|v| v == want);
-        let query_ok = req
-            .uri()
-            .query()
-            .is_some_and(|q| q.split('&').any(|p| p == format!("token={want}")));
-        if !header_ok && !query_ok {
-            return (StatusCode::UNAUTHORIZED, "porche-web: bad or missing bearer token\n")
-                .into_response();
-        }
+    let Some(want) = app.token.clone() else {
+        return next.run(req).await;
+    };
+    let header_ok = req
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .is_some_and(|v| v == want);
+    let cookie_ok = req
+        .headers()
+        .get(header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|c| c.split(';').any(|p| p.trim() == format!("{COOKIE}={want}")));
+    let query_token = req
+        .uri()
+        .query()
+        .and_then(|q| q.split('&').find(|p| p.starts_with("token=")))
+        .map(|p| p.strip_prefix("token=").unwrap_or_default());
+    // one-time ?token= → set the cookie, redirect to the clean path (htmx
+    // polls then carry the cookie on every fragment fetch)
+    if query_token.is_some_and(|t| t == want) {
+        let path = req.uri().path().to_string();
+        return (
+            StatusCode::SEE_OTHER,
+            [
+                (header::SET_COOKIE, format!("{COOKIE}={want}; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax")),
+                (header::LOCATION, path),
+            ],
+        )
+            .into_response();
+    }
+    if !header_ok && !cookie_ok {
+        return (StatusCode::UNAUTHORIZED, "porche-web: bad or missing token (Bearer header, porche_token cookie, or ?token=)\n")
+            .into_response();
     }
     next.run(req).await
 }
@@ -120,6 +152,7 @@ fn row_of(r: &Record) -> WorkloadRow {
 #[derive(Template)]
 #[template(path = "workloads.html")]
 struct WorkloadsPage {
+    base: String,
     mode: &'static str,
     version: &'static str,
     records: Vec<WorkloadRow>,
@@ -129,6 +162,7 @@ async fn workloads(State(app): State<Arc<AppState>>) -> Html<String> {
     let records = app.store.list().unwrap_or_default();
     let rows = records.iter().map(row_of).collect();
     WorkloadsPage {
+        base: app.base.clone(),
         mode: app.mode,
         version: env!("CARGO_PKG_VERSION"),
         records: rows,
@@ -141,6 +175,7 @@ async fn workloads(State(app): State<Arc<AppState>>) -> Html<String> {
 #[derive(Template)]
 #[template(path = "workload_form.html")]
 struct WorkloadFormPage {
+    base: String,
     mode: &'static str,
     version: &'static str,
     error: Option<String>,
@@ -179,6 +214,7 @@ fn image_digests(app: &AppState, selected_for: &str) -> Vec<(String, bool)> {
 
 async fn create_form(State(app): State<Arc<AppState>>) -> Html<String> {
     WorkloadFormPage {
+        base: app.base.clone(),
         mode: app.mode,
         version: env!("CARGO_PKG_VERSION"),
         error: None,
@@ -240,11 +276,12 @@ async fn create_submit(
     match result {
         Ok(()) => {
             audit(&app, "CreateWorkload", &form.id, "ok");
-            Redirect::to(&format!("/w/{}", form.id)).into_response()
+            Redirect::to(&format!("{}/w/{}", app.base, form.id)).into_response()
         }
         Err(e) => {
             audit(&app, "CreateWorkload", &form.id, &format!("rejected: {e}"));
             Html(WorkloadFormPage {
+                base: app.base.clone(),
                 mode: app.mode,
                 version: env!("CARGO_PKG_VERSION"),
                 error: Some(e.to_string()),
@@ -291,6 +328,7 @@ fn build_spec(form: &CreateForm) -> Result<WorkloadSpec, String> {
 #[derive(Template)]
 #[template(path = "workload_detail.html")]
 struct WorkloadDetailPage {
+    base: String,
     mode: &'static str,
     version: &'static str,
     row: WorkloadRow,
@@ -303,6 +341,7 @@ struct WorkloadDetailPage {
 async fn workload_detail(State(app): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
     match app.store.get(&id) {
         Ok(Some(r)) => Html(WorkloadDetailPage {
+            base: app.base.clone(),
             mode: app.mode,
             version: env!("CARGO_PKG_VERSION"),
             row: row_of(&r),
@@ -317,7 +356,7 @@ async fn workload_detail(State(app): State<Arc<AppState>>, Path(id): Path<String
         .render()
         .unwrap())
         .into_response(),
-        _ => error_page(&app, &format!("workload not found: {id}"), "/w").into_response(),
+        _ => error_page(&app, &format!("workload not found: {id}"), &format!("{}/w", app.base)).into_response(),
     }
 }
 
@@ -349,11 +388,11 @@ async fn stop_workload(State(app): State<Arc<AppState>>, Path(id): Path<String>)
     match result {
         Ok(()) => {
             audit(&app, "StopWorkload", &id, "ok");
-            Redirect::to(&format!("/w/{id}")).into_response()
+            Redirect::to(&format!("{}/w/{}", app.base, id)).into_response()
         }
         Err(e) => {
             audit(&app, "StopWorkload", &id, &format!("rejected: {e}"));
-            error_page(&app, &format!("stop {id}: {e}"), &format!("/w/{id}")).into_response()
+            error_page(&app, &format!("stop {id}: {e}"), &format!("{}/w/{id}", app.base)).into_response()
         }
     }
 }
@@ -361,6 +400,7 @@ async fn stop_workload(State(app): State<Arc<AppState>>, Path(id): Path<String>)
 #[derive(Template)]
 #[template(path = "wipe_report.html")]
 struct WipeReportPage {
+    base: String,
     mode: &'static str,
     version: &'static str,
     id: String,
@@ -387,6 +427,7 @@ async fn wipe_workload(State(app): State<Arc<AppState>>, Path(id): Path<String>)
         Ok(report) => {
             audit(&app, "DeleteWorkload", &id, "ok (teardown report rendered)");
             Html(WipeReportPage {
+                base: app.base.clone(),
                 mode: app.mode,
                 version: env!("CARGO_PKG_VERSION"),
                 id,
@@ -402,7 +443,7 @@ async fn wipe_workload(State(app): State<Arc<AppState>>, Path(id): Path<String>)
         }
         Err(e) => {
             audit(&app, "DeleteWorkload", &id, &format!("rejected: {e}"));
-            error_page(&app, &format!("wipe {id}: {e}"), &format!("/w/{id}")).into_response()
+            error_page(&app, &format!("wipe {id}: {e}"), &format!("{}/w/{id}", app.base)).into_response()
         }
     }
 }
@@ -410,6 +451,7 @@ async fn wipe_workload(State(app): State<Arc<AppState>>, Path(id): Path<String>)
 #[derive(Template)]
 #[template(path = "fleet.html")]
 struct FleetPage {
+    base: String,
     mode: &'static str,
     version: &'static str,
     hostname: String,
@@ -456,6 +498,7 @@ async fn fleet(State(app): State<Arc<AppState>>) -> Html<String> {
     };
     let workloads = app.store.list().map(|l| l.len()).unwrap_or(0);
     FleetPage {
+        base: app.base.clone(),
         mode: app.mode,
         version: env!("CARGO_PKG_VERSION"),
         hostname: read_trim("/proc/sys/kernel/hostname"),
@@ -484,6 +527,7 @@ async fn fleet(State(app): State<Arc<AppState>>) -> Html<String> {
 #[derive(Template)]
 #[template(path = "audit.html")]
 struct AuditPage {
+    base: String,
     mode: &'static str,
     version: &'static str,
     rows: Vec<AuditRow>,
@@ -506,13 +550,14 @@ async fn audit_page(State(app): State<Arc<AppState>>) -> Html<String> {
         .into_iter()
         .map(|e| AuditRow {
             ts: epoch_utc(e.ts),
-            actor: e.actor.clone(),
-            action: e.action.clone(),
-            object: e.object.clone(),
-            result: e.result.clone(),
+            actor: e.actor,
+            action: e.action,
+            object: e.object,
+            result: e.result,
         })
         .collect();
     AuditPage {
+        base: app.base.clone(),
         mode: app.mode,
         version: env!("CARGO_PKG_VERSION"),
         rows,
@@ -525,6 +570,7 @@ async fn audit_page(State(app): State<Arc<AppState>>) -> Html<String> {
 #[derive(Template)]
 #[template(path = "error.html")]
 struct ErrorPage {
+    base: String,
     mode: &'static str,
     version: &'static str,
     message: String,
@@ -533,6 +579,7 @@ struct ErrorPage {
 
 fn error_page(app: &AppState, message: &str, back: &str) -> Html<String> {
     ErrorPage {
+        base: app.base.clone(),
         mode: app.mode,
         version: env!("CARGO_PKG_VERSION"),
         message: message.into(),
@@ -560,6 +607,10 @@ mod tests {
     }
 
     fn test_app_opt(tag: &str, token: Option<String>) -> Arc<AppState> {
+        test_app_full(tag, token, "")
+    }
+
+    fn test_app_full(tag: &str, token: Option<String>, base: &str) -> Arc<AppState> {
         let dir = std::env::temp_dir().join(format!("porche-web-test-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -574,6 +625,7 @@ mod tests {
             audit: std::sync::Mutex::new(AuditLog::open(dir.join("audit.jsonl"))),
             mode: "dry",
             token,
+            base: base.to_string(),
         })
     }
 
@@ -723,7 +775,6 @@ mod tests {
 
         let res = router
             .clone()
-            .clone()
             .oneshot(Request::builder().uri("/w").body(Body::empty()).unwrap())
             .await
             .unwrap();
@@ -735,6 +786,105 @@ mod tests {
                 Request::builder()
                     .uri("/w")
                     .header(header::AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn base_path_mounts_routes_and_prefixes_links() {
+        let app = test_app_full("base", None, "/porche/user");
+        let mut router = router(app);
+
+        // the mount root redirects into the base
+        let res = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/porche/user")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::SEE_OTHER);
+        assert_eq!(
+            res.headers().get(header::LOCATION).unwrap(),
+            "/porche/user/w"
+        );
+
+        // pages render with base-prefixed links (proxied deployments stay whole)
+        let res = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/porche/user/w")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let page = body_string(res).await;
+        assert!(
+            page.contains("href=\"/porche/user/w/new\""),
+            "links not prefixed"
+        );
+        assert!(page.contains("src=\"/porche/user/htmx.js\""), "htmx not prefixed");
+
+        // mutations redirect within the base
+        let res = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/porche/user/w/new")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(VALID_FORM))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            res.headers().get(header::LOCATION).unwrap(),
+            "/porche/user/w/w1"
+        );
+    }
+
+    #[tokio::test]
+    async fn query_token_sets_cookie_and_redirects() {
+        let app = test_app_full("cookie", Some("secret".into()), "");
+        let mut router = router(app);
+
+        let res = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/w?token=secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::SEE_OTHER);
+        assert_eq!(res.headers().get(header::LOCATION).unwrap(), "/w");
+        let set_cookie = res
+            .headers()
+            .get(header::SET_COOKIE)
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(set_cookie.contains("porche_token=secret"), "{set_cookie}");
+
+        // and the cookie satisfies the gate
+        let res = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/w")
+                    .header(header::COOKIE, "porche_token=secret")
                     .body(Body::empty())
                     .unwrap(),
             )

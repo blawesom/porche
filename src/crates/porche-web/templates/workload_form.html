@@ -6,7 +6,7 @@
 <div class="banner err-banner"><strong>rejected:</strong> {{ e }}</div>
 {% when None %}
 {% endmatch %}
-<form method="post" action="/w/new">
+<form method="post" action="{{ base }}/w/new">
   <label>id
     <input name="id" value="{{ form.id }}" required pattern="[a-z0-9-]+" title="lowercase letters, digits, dashes">
   </label>

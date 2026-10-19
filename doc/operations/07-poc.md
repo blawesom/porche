@@ -269,6 +269,6 @@ node happens locally.
 | WS-D | **exercised 2026-10-19** — 5-cycle stability loop on node: no wedge, no residue, teardown P50 1.33 s / P99 1.33 s (§7.5-mini PASS); boot-time + density scripts ready, not yet run at §7.2 scale |
 | WS-E | not started (after WS-C/D at scale) |
 | WS-F | not started (FCOS OMI → recorded run) |
-| **UX MVP (E-28)** | **console-host `porche-web` built 2026-10-19** — both surfaces over the PoC adapter (doc 09 §Console, doc 12 §9): workloads list/create/detail (console-tab poll), stop, **DeleteWorkload → wipe-report page**, admin fleet-of-one + audit stream; 5 unit tests + full dry-mode cycle verified locally (create→running→stop→wipe all-pass). **Live-mode node demo deferred** — the gen-7 metal pool in eu-west-2a went `InsufficientCapacity` mid-burst (also the StartVms-504 root cause, doc 13 §4); runs when capacity returns |
+| **UX MVP (E-28)** | **console-host `porche-web` built + deployed 2026-10-19** — both surfaces over the PoC adapter (doc 09 §Console, doc 12 §9): workloads list/create/detail (console-tab poll), stop, **DeleteWorkload → wipe-report page**, admin fleet-of-one + audit stream; 7 unit tests + full dry-mode cycle verified. **Live at `dev.laplane.net/porche/user` + `/porche/admin`** (systemd + HAProxy, tokens, dry mode — `deploy/README.md`). **Live-mode node demo deferred** — the gen-7 metal pool in eu-west-2a went `InsufficientCapacity` mid-burst (also the StartVms-504 root cause, doc 13 §4); runs when capacity returns |
 
 First-run artifacts: `runs/20261019-1201-miniloop/` (fixtures + results).

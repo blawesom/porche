@@ -12,5 +12,5 @@ object. All five probes must pass or the row would still exist:</p>
 <tr><td>region_trimmed</td><td class="{% if region_trimmed %}ok{% else %}err{% endif %}">{% if region_trimmed %}✓ pass{% else %}✗ FAIL{% endif %}</td></tr>
 <tr><td>region_clean</td><td class="{% if region_clean %}ok{% else %}err{% endif %}">{% if region_clean %}✓ pass{% else %}✗ FAIL{% endif %}</td></tr>
 </table>
-<p><a href="/w">← workloads</a></p>
+<p><a href="{{ base }}/w">← workloads</a></p>
 {% endblock %}

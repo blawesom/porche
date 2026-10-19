@@ -27,14 +27,14 @@
   .subtle { opacity: .65; font-size: .82rem; }
   code { background: #8882; padding: 0 .3rem; }
 </style>
-<script src="/htmx.js"></script>
+<script src="{{ base }}/htmx.js"></script>
 </head>
 <body>
 <nav>
   <strong>PORCHE</strong>
-  <a href="/w">workloads</a>
-  <a href="/a">fleet</a>
-  <a href="/a/audit">audit</a>
+  <a href="{{ base }}/w">workloads</a>
+  <a href="{{ base }}/a">fleet</a>
+  <a href="{{ base }}/a/audit">audit</a>
   <span class="mode">{{ mode }} · porche-web {{ version }}</span>
 </nav>
 <main>

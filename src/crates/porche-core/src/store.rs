@@ -54,6 +54,10 @@ impl SqliteStore {
     }
 
     fn init(conn: Connection) -> Result<Self, StoreError> {
+        // timeout FIRST: two console surfaces (or CLI + console) may init the
+        // same store simultaneously — the WAL pragma below is a write and
+        // would otherwise race with "database is locked" (observed on dev)
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "FULL")?;
         conn.execute_batch(

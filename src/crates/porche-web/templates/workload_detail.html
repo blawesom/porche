@@ -19,16 +19,16 @@
 
 <p>
   {% if can_stop %}
-  <form class="inline" method="post" action="/w/{{ row.id }}/stop"><button>stop</button></form>
+  <form class="inline" method="post" action="{{ base }}/w/{{ row.id }}/stop"><button>stop</button></form>
   {% endif %}
-  <form class="inline" method="post" action="/w/{{ row.id }}/wipe"
+  <form class="inline" method="post" action="{{ base }}/w/{{ row.id }}/wipe"
         onsubmit="return confirm('DeleteWorkload is an operation: kill, unmap, crypto-erase. Continue?')">
     <button>delete (wipe)</button>
   </form>
 </p>
 
 <h2>console <span class="subtle">(GetConsole — recorded log, polled)</span></h2>
-<div id="console" hx-get="/w/{{ row.id }}/console" hx-trigger="every 2s">
+<div id="console" hx-get="{{ base }}/w/{{ row.id }}/console" hx-trigger="every 2s">
   <p class="subtle">loading…</p>
 </div>
 {% endblock %}

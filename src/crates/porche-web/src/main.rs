@@ -26,6 +26,9 @@ pub struct AppState {
     pub audit: Mutex<AuditLog>,
     pub mode: &'static str,
     pub token: Option<String>,
+    /// URL base the app is served under ("" at root; "/porche/user" behind a
+    /// path-prefix proxy) — every route and template link is prefixed with it.
+    pub base: String,
 }
 
 /// htmx, vendored (E-28 — no CDN; pinned below) for live fragments only:
@@ -56,9 +59,14 @@ struct Cli {
     #[arg(long, default_value = "127.0.0.1:8080")]
     bind: String,
     /// Optional bearer token — stage-1 stand-in; the planes bring the real
-    /// authN domains (E-8/FR-40, E-28).
+    /// authN domains (E-8/FR-40, E-28). Accepted as a header, a cookie, or a
+    /// one-time ?token= that sets the cookie and redirects clean.
     #[arg(long, env = "PORCHE_WEB_TOKEN")]
     token: Option<String>,
+    /// URL base path (e.g. /porche/user behind a path-prefix proxy; default
+    /// serves at root).
+    #[arg(long, default_value = "")]
+    base_path: String,
 }
 
 #[tokio::main]
@@ -73,6 +81,10 @@ async fn main() {
     let mode = if cli.dry { "dry" } else { "live" };
     let exec = DirectExecutor::new(runner, &cli.data_dir, &cli.keys_file);
 
+    let base = cli
+        .base_path
+        .trim_end_matches('/')
+        .to_string(); // "" or "/porche/user" — no trailing slash
     let state = Arc::new(AppState {
         store,
         exec: Mutex::new(exec),
@@ -80,14 +92,16 @@ async fn main() {
         audit: Mutex::new(AuditLog::open(cli.data_dir.join("console-audit.jsonl"))),
         mode,
         token: cli.token,
+        base,
     });
 
     let listener = tokio::net::TcpListener::bind(&cli.bind)
         .await
         .unwrap_or_else(|e| panic!("porche-web: bind {}: {e}", cli.bind));
     eprintln!(
-        "porche-web: http://{}/w ({mode} mode) — user console; /a admin console",
-        listener.local_addr().unwrap()
+        "porche-web: http://{}/w ({mode} mode, base {:?}) — user console; /a admin console",
+        listener.local_addr().unwrap(),
+        state.base
     );
     axum::serve(listener, handlers::router(state))
         .await

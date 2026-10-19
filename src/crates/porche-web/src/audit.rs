@@ -3,12 +3,12 @@
 //! keeps it beside the desired-state store; the planes (P1) write the same
 //! entries via SEC-23.
 
-use std::collections::VecDeque;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[derive(serde::Deserialize)]
 pub struct AuditEntry {
     pub ts: i64,
     pub actor: String,
@@ -19,18 +19,14 @@ pub struct AuditEntry {
 
 pub struct AuditLog {
     path: PathBuf,
-    ring: VecDeque<AuditEntry>,
 }
 
-/// What the audit page serves (bounded; the JSONL file is the record).
-const RING_CAP: usize = 500;
+/// What the audit page serves per read (bounded; the JSONL file is the record).
+const READ_BACK: usize = 200;
 
 impl AuditLog {
     pub fn open(path: PathBuf) -> Self {
-        Self {
-            path,
-            ring: VecDeque::new(),
-        }
+        Self { path }
     }
 
     pub fn record(&mut self, actor: &str, action: &str, object: &str, result: &str) {
@@ -41,6 +37,9 @@ impl AuditLog {
             object: object.into(),
             result: result.into(),
         };
+        if let Some(parent) = self.path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
         if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&self.path) {
             let _ = writeln!(
                 f,
@@ -51,15 +50,23 @@ impl AuditLog {
                 })
             );
         }
-        if self.ring.len() == RING_CAP {
-            self.ring.pop_front();
-        }
-        self.ring.push_back(e);
     }
 
-    /// Newest first.
-    pub fn entries(&self) -> Vec<&AuditEntry> {
-        self.ring.iter().rev().collect()
+    /// Newest first, read back from the JSONL — every writer (both console
+    /// surfaces, later the CLI) lands here, not just this process's ring.
+    pub fn entries(&self) -> Vec<AuditEntry> {
+        let text = std::fs::read_to_string(&self.path).unwrap_or_default();
+        let mut out: Vec<AuditEntry> = text
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .filter_map(|l| serde_json::from_str::<AuditEntry>(l).ok())
+            .collect();
+        if out.len() > READ_BACK {
+            let skip = out.len() - READ_BACK;
+            out.drain(..skip);
+        }
+        out.reverse();
+        out
     }
 }
 
