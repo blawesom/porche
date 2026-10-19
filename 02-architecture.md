@@ -1,11 +1,14 @@
 # 02 — Core Architecture Design (new orchestrator, incumbent design as reference)
 
-Working document — v6, 2026-10-18. Implements `01-requirements.md`.
+Working document — v7, 2026-10-18. Implements `01-requirements.md`.
 **v4** (doc 08 E-1..E-3): stateful workloads and ingress first-class v1; live migration
 is a v1 goal. **v5** (doc 08 E-4): **Cloud Hypervisor directly orchestrated — single
 runtime; Kata and containerd dropped** (§4, doc 08 A-9).
 **v6** (doc 08 E-8): **three-plane separation** — admin control plane / tenant control
 plane / workload data plane (§3.1).
+**v7** (doc 08 E-12/E-14/E-16..E-21): CNI references removed (native netns per doc 14);
+phase vocabulary = P-codes only; §7 gains the P1 critical-path note; PoC position per
+E-16 (metal keeps every perf/security gate).
 Simplification rationale: `03-simplification.md` (C-1..C-6, superseded in part by E-4 —
 see doc 03 §6).
 Storage durability tiers (local NVMe write-back + epoch sync, checkpoint semantics): `04-storage-tiers.md`.
@@ -104,7 +107,7 @@ Each improvement is traceable to a requirement (doc 01) and a root cause (assess
                                            │ dual authority — admin lifecycle + tenant desired state, §3.1)
      ┌─────────────────────────────────────┼──────────────────────────────────┐
      │ host-agent (new code, C-4 + E-4 lifecycle role)  │   IaaS — bare metal hosts       │
-     │   hardened immutable OS (I-6), CNI      │                                  │
+     │   hardened immutable OS (I-6), netns/veth (E-12) │                                  │
      │     │                                    │                                  │
      │     └─ Cloud Hypervisor — one VMM process per workload (E-4)                 │
      │          └─ microVM ── workload  (stdio = serial console, recorded;      │
@@ -184,7 +187,7 @@ directly** — one VMM per workload, driven by the host-agent over CLH's local A
 - The host-agent gains the **per-VM lifecycle role** (spawn, supervise, stop, reap,
   migrate) — the C-1 deletion partially returns, bounded: lifecycle and migration driving
   over CLH's HTTP API; no guest protocol, no image handling, no QMP parsing.
-- **No exec into a running workload in v1** — a minimal audited guest agent is a phase-2
+- **No exec into a running workload in v1** — a minimal audited guest agent is a P2
   addition if a use case demands it (doc 08 action 12).
 - **App-consistent seals deferred** — crash-consistency is the default contract (doc 04);
   a guest-side freeze trigger is designed when needed.
@@ -231,7 +234,7 @@ having no channel to attack.
 | Old incumbent-agent feature | v1 replacement |
 |---|---|
 | Lifecycle/stdio | workload stdio = serial console (virtio-console), recorded host-side (FR-6) |
-| Exec into a running workload | **not in v1** — phase-2 minimal audited agent if demanded (doc 08 action 12) |
+| Exec into a running workload | **not in v1** — P2 minimal audited agent if demanded (doc 08 action 12) |
 | Metadata | metadata-proxy + boot-injected single-use token (C-3) — no guest-side agent needed |
 | Guest metrics | host-side only (VMM cgroup + virtio stats) |
 | Snapshot sync (app-consistent) | deferred with the guest agent; crash-consistent checkpoints are the default (doc 04) |
@@ -298,7 +301,7 @@ should be able to read tenant data.
   is inherited by construction — the clone happens on the decrypted view inside a new
   envelope.
 - **Default-on, not opt-in**: creation path has no plaintext mode (SEC-15). Tenant-managed
-  keys (CMK) are a phase-2 extension of the same wrapping hierarchy.
+  keys (CMK) are a P2 extension of the same wrapping hierarchy.
 
 ### 5.3 What it does NOT cover (explicit non-goals)
 
@@ -368,11 +371,14 @@ column is what the new orchestrator does instead. Nothing is reused as software.
 | storage agents | **storage role** in the one binary (I-13) | volume create/clone key-aware, raw+LUKS2 (I-2, C-5) |
 | NFS storage pool | adopted | ciphertext only on the pool |
 | hypervisor OS | immutable, hardened, verified boot | new ops model (I-6) |
-| per-host networking | CNI plugins (C-6) | standardized; VPC model adopted (v1) |
+| per-host networking | ~~CNI plugins (C-6)~~ | **superseded by E-12/doc 14**: native netns/veth/bridge in the host-agent; VPC model adopted (v1) |
 
 ---
 
 ## 7. Phasing
+
+Phase vocabulary: **P0–P3 in this table are the corpus's only phase codes**; prose says
+"P2"/"P3", never "phase 2/3".
 
 **P1 definition of done — top 3** (E-15 decision anchor; when priorities collide, the
 lower-numbered outcome wins, and no requirement outside the top-3 blocks a P1 exit):
@@ -385,10 +391,16 @@ lower-numbered outcome wins, and no requirement outside the top-3 blocks a P1 ex
    the pool.
 3. The cold-start + teardown budget is met **on metal**: PERF-1/5/8/9.
 
+**P1 critical path = tier-R storage machinery** (E-15 consequence): checkpoint migration
+is the P1 must, so the A-1 dm-composition stack, epoch sync, `SyncVolume`, and the
+storage-worker clone sit on it — with PERF-12 (P50 < 60 s cutover) as the exit gate,
+alongside the networking data path. The PoC itself runs in the integration environment
+(E-16); every perf and security *evidence* gate stays metal-only.
+
 | Phase | Scope | Exit criteria |
 |---|---|---|
 | P0 | 1 host, control plane v0 (new build), host-agent + CLH (direct, E-4), one encrypted volume round-trip (create→attach→write→detach) | doc 01 acceptance criteria 1–7 |
-| P1 | Full create-instance flow on the new path; storage worker (clone) under encryption; KMS in HA; CNI networking; ingress data path (per-host proxy, E-2); **live-migration two-host spike on the direct-CLH stack (A-9, E-4)** | PERF-1/5/8/9 met; F42-fix PoC (no guest-controlled channel exists to attack); F0.1-fix PoC (metadata without token fails); PERF-13 evidenced on the spike — else **E-15 fallback**: live migration moves to P2, checkpoint migration stands |
+| P1 | Full create-instance flow on the new path; storage worker (clone) under encryption; KMS in HA; **workload networking** (doc 14 — netns/isolated bridge, routed /32, egress/ingress proxies, IngressRule/EgressRule/SecurityGroup — E-12/E-14); ingress data path (per-host proxy, E-2); **live-migration two-host spike on the direct-CLH stack (A-9, E-4)** | PERF-1/5/8/9 met; F42-fix PoC (no guest-controlled channel exists to attack); F0.1-fix PoC (metadata without token fails); PERF-13 evidenced on the spike — else **E-15 fallback**: live migration moves to P2, checkpoint migration stands |
 | P2 | GPU (VFIO/MIG via CLH hotplug), runtime volume attach/detach (hotplug), live migration GA (PERF-13), CMK option for tenants | GPU PoC on A100; PERF-13 met; CMK wrap hierarchy reviewed |
 | P3 | HA hardening, fleet version-registry enforcement, CI attack suite at full coverage | I-5 gate enforced (deploys blocked on EOL/CVE) |
 
@@ -398,7 +410,7 @@ lower-numbered outcome wins, and no requirement outside the top-3 blocks a P1 ex
 
 - [ ] Guest image tooling for direct CLH: kernel/initramfs/rootfs build and boot-time
       budget (PERF-2) — decided in the PoC (doc 08 action 11).
-- [ ] Minimal guest agent (exec, app-consistent seal trigger) — design deferred to phase 2,
+- [ ] Minimal guest agent (exec, app-consistent seal trigger) — design deferred to P2,
       only if a use case demands it (E-4, doc 08 action 12).
 - [ ] Does the metadata proxy live per-host or in the control plane? (Per-host = smaller blast radius;
       SI = one place to audit.)

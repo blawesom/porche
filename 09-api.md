@@ -1,11 +1,12 @@
 # 09 — API: Object Catalog (CRUD + Main Attributes)
 
-Working document — v3, 2026-10-18. Resolves challenge B-3 (doc 08): the PORCHE API
+Working document — v5, 2026-10-18. Resolves challenge B-3 (doc 08): the PORCHE API
 specified as **objects with CRUD and main attributes** — deliberately at attribute level,
 not full OpenAPI, until P0 feedback. Fills out FR-40. **v2**: Exposure object added
 (ingress first-class v1 — E-2). **v3 (E-8)**: two API surfaces — tenant and admin.
 **v4 (E-14)**: Exposure renamed **IngressRule** (+ `source_cidrs`); **EgressRule** and
-**SecurityGroup** objects added.
+**SecurityGroup** objects added. **v5 (E-17/E-21)**: Image create = **`ImportImage` →
+controlled rebuild** (never direct execution); **v1 API surface frozen at E-14**.
 
 Transport: HTTPS REST + gRPC mirror; AuthN per SEC-20 (short-lived tokens, rotation);
 every call audit-logged (SEC-23). Scope: every object and attribute is visible only to its
@@ -105,7 +106,7 @@ operator-owned mutations where relevant.
 | | |
 |---|---|
 | Attributes | `digest`, `name`, `tags`, `owner` (platform or user), `signed`, `sbom_ref` |
-| CRUD | create (via build/intake pipeline — never direct execution, FR-31), read, update (re-tag), delete (GC when unreferenced) |
+| CRUD | create (**`ImportImage` → controlled rebuild** into the platform format — never direct execution, FR-31/FR-32, E-17), read, update (re-tag), delete (GC when unreferenced) |
 
 ### Quota
 | | |
@@ -124,6 +125,8 @@ scoping rules per doc 05 §2.
 ## Conventions
 
 - **Immutable IDs**; state machines per object as documented in 01/05.
+- **The v1 API surface is frozen at E-14** (E-21): a new v1 object or field must evict
+  equivalent scope; additions queue in the P2 register.
 - Every mutating call is idempotent (client retry-safe) and maps to one audit-log entry.
 - Errors carry machine-readable constraint reasons (why pending, why rejected) — the
   explainability rule (doc 05 §2) applies to the API surface itself.

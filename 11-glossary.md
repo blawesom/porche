@@ -1,10 +1,12 @@
 # 11 — Glossary and Controlled-Language Rules
 
-Working document — v3, 2026-10-18. One word, one meaning — the lightweight controlled-English
+Working document — v4, 2026-10-18. One word, one meaning — the lightweight controlled-English
 contract (inspired by ASD-STE100, without its full cost; see doc 08 discussion). Applies to
 the whole corpus from this version on. Legacy uses that predate this glossary are superseded
 by the definitions below. **v2**: migration terms redefined — live migration is in scope
 as a v1 goal (E-3, doc 08). **v3 (E-8)**: control plane split into planes.
+**v4 (E-16/E-17)**: *metal validation run* and *smoke signal* added; *intake sandbox*
+marked deferred (dangling doc-02 §3.2 pointer fixed); P-codes added.
 
 ---
 
@@ -54,11 +56,14 @@ In doc 01 (and wherever requirements are restated):
 | **DEK / KEK / KMS** | Data key (per volume) / key-encryption key (KMS-held) / the key service. | — |
 | **host** | A bare metal machine (API object, doc 09). Always "host", never "server"/"node". | — |
 | **HostGroup** | A failure domain (rack / power / maintenance; doc 05 §1.2). | — |
-| **intake sandbox** | The restricted first-run sandbox for unvetted images (doc 02 §3.2). | — |
+| **intake sandbox** | The restricted first-run sandbox for unvetted images — **deferred from v1** (E-17; doc 01 FR-31). | — |
 | **admin control plane** | The operator-only services: fleet lifecycle, version registry + deploy gates, image pipeline, security monitoring, user administration (E-8). | tenant-facing services (say *tenant control plane*) |
 | **tenant control plane** | The tenant-facing services: workload/volume/network-rule (ingress/egress/security-group) orchestration, placement views, quotas, metering (E-8). | operator capability; fleet-global views |
 | **data plane** | The workload execution path: hosts, microVMs, per-host proxies, storage shards. Tenant traffic never transits a control plane (I-14). | control-plane traffic (orders, metrics, audit) |
 | **incumbent (design)** | The reference platform's design (doc 06 §4) — concepts only, no software. | anything PORCHE runs |
+| **metal validation run** | The run of the PoC/P1 harness on a physical bare-metal host that owns performance and security **evidence** gates (E-16). | smoke signals from the integration environment |
+| **P0..P3** | The corpus's only phase codes (doc 02 §7). Prose says "P2"/"P3", never "phase 2/3". | informal phase numbering |
+| **smoke signal** | A number measured in the integration environment (doc 13 §2): functional evidence only — never a gate. | a passed gate |
 
 ## 3. Writing rules (procedure documents, esp. doc 10)
 

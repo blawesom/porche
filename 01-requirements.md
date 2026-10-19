@@ -1,6 +1,6 @@
 # 01 — Requirements Specification
 
-Working document — v4, 2026-10-18. First normative document of the PORCHE project.
+Working document — v7, 2026-10-18. First normative document of the PORCHE project.
 **v2** (doc 08 E-1..E-3): stateful enterprise workloads and ingress access
 are first-class v1 citizens; live migration is a v1 goal.
 **v3** (doc 08 E-4): **Cloud Hypervisor, directly orchestrated, is the single runtime** —
@@ -12,13 +12,18 @@ for stateful U4).
 **v6** (doc 08 E-15): E-3 re-tiered — checkpoint migration is the P1 must, live
 migration a P1 stretch with a predefined fallback trigger (A-9 spike); metering is
 internal showback (no customer-facing chargeback); OPS-2 restated.
+**v7** (doc 08 E-16..E-21): the PoC executes in the integration environment — perf and
+security *evidence* stays metal-only (E-16); FR-1/FR-31 restated — v1 executes
+controlled-rebuild output only (`ImportImage` for tenant OCI images; intake sandbox
+deferred, E-17); FR-6 console recording is host-local and lifetime-bounded (E-19); phase
+vocabulary switched to P-codes.
 
 **Conventions (RFC 2119, doc 11 §1)**: every FR/SEC/PERF/OPS statement is **MUST** —
 normative, violation is a defect — unless explicitly marked **SHOULD** (deviation requires
 recorded justification) or **MAY** (optional). Terms carry the doc 11 glossary meanings.
 
 **Purpose**: define the requirements of a bare metal cloud orchestrator for untrusted workloads
-(AI agents, jobs, builds) **and long-lived stateful enterprise applications**, GPU in phase 2.
+(AI agents, jobs, builds) **and long-lived stateful enterprise applications**, GPU in P2.
 First-in-class performance and security, by design.
 
 **Reference adversary**: a compromised workload running on the pool — it attempts guest→host
@@ -37,7 +42,8 @@ tenant (platform enumeration, fingerprinting).
 ### 1.1 What PORCHE is
 
 - An orchestrator that **provisions and manages bare metal hosts** (immutable, hardened OS) and
-  **runs isolated workloads** on them (microVMs, container-compatible API).
+  **runs isolated workloads** on them (microVMs — tenant OCI images accepted at intake
+  and rebuilt into the platform format: FR-1/FR-31/FR-32, E-17).
 - A platform where **stateful workloads are first-class citizens** (E-1): long-lived enterprise
   applications (databases, app servers, queues) run on persistent tier R/S volumes, serve
   ingress, and are **live-migratable** (P1 stretch, gated on the A-9 spike — checkpoint
@@ -54,12 +60,13 @@ tenant (platform enumeration, fingerprinting).
 - **Not a general-purpose public IaaS** — no commercial multi-region, no heterogeneous instance
   catalog, no customer billing; **no customer-facing chargeback** — metering (FR-42) is
   internal showback, a cost *signal* for placement decisions (E-15).
-- **Not Kubernetes** — no dependency on the K8s ecosystem (but OCI image compatibility).
+- **Not Kubernetes** — no dependency on the K8s ecosystem (but OCI images are accepted
+  at intake and rebuilt into the platform format — FR-31/FR-32, E-17).
 - **No heterogeneous guest OSes** (category 5) in v1 — Windows is out of scope
-  (re-evaluation possible in phase 3+). **Live migration is in scope** (E-3, tiered by
+  (re-evaluation possible after v1 — no phase scheduled). **Live migration is in scope** (E-3, tiered by
   E-15): it applies to microVMs and does not require category-5 VMs. It is a **P1
   stretch**, gated on the A-9 two-host spike (doc 08); **checkpoint migration is the P1
-  must** and stands regardless of the spike outcome. Not deferred to phase 3+.
+  must** and stands regardless of the spike outcome. Not deferred beyond v1.
 - **No trust in the workload** — no feature may depend on the goodwill of executed code
   (a "cooperative agent" is never the only control).
 
@@ -73,7 +80,7 @@ tenant (platform enumeration, fingerprinting).
 | U2 | Disposable build/CI jobs | 1–8 vCPU, bursty I/O, controlled rootfs | Density + ephemerality |
 | U3 | Dev environments | persistent, long sessions | Persistent volumes, long-lived VMs |
 | U4 | Stateful enterprise applications (databases, app servers, queues) | 2–32 vCPU, 2–128 GB, tier R/S volumes, long-lived (weeks–years), serves ingress | Live migration + non-disruptive maintenance (E-1/E-2/E-3) |
-| U5 | GPU workloads (inference, fine-tuning) | phase 2: A100 via VFIO passthrough or MIG | Isolation + GPU scheduling |
+| U5 | GPU workloads (inference, fine-tuning) | P2: A100 via VFIO passthrough or MIG | Isolation + GPU scheduling |
 
 ---
 
@@ -81,7 +88,10 @@ tenant (platform enumeration, fingerprinting).
 
 ### 3.1 Workload lifecycle
 
-- **FR-1** — API to create a workload from: (a) an OCI image, (b) a command + minimal rootfs.
+- **FR-1** — API to create a workload from: (a) a **platform image** (signed,
+  digest-pinned rootfs from the catalog), (b) a command + minimal rootfs. Tenant OCI
+  images enter through a separate asynchronous call (**`ImportImage`**, E-17) that
+  rebuilds them into the platform format (FR-31/FR-32) before they become runnable.
   Asynchronous response with observable state.
 - **FR-2** — Managed states: `pending → scheduled → starting → running → stopped/failed → reaped`.
   Every transition timestamped and queryable (append-only audit log).
@@ -102,9 +112,12 @@ tenant (platform enumeration, fingerprinting).
   self-service).
 - **FR-6** — Console/stdio: access to stdout/stderr streams and a serial console, **recorded**
   (not just relayed) for execution audit. Mechanism (E-4): the workload's stdio is its
-  serial console (virtio-console), recorded host-side. **Exec into a running workload is
-  not a v1 feature** (no guest agent exists — E-4; a minimal audited guest agent is a
-  phase-2 addition if a use case demands it).
+  serial console (virtio-console), recorded host-side to a **per-workload local log** —
+  host-local and lifetime-bounded (E-19): destroyed with the workload (FR-3) for
+  ephemeral classes, retained ≤ workload TTL + 24 h for stateful; readable by the tenant
+  via the tenant API for their **own** workloads. **No central console-log store in v1.**
+  **Exec into a running workload is not a v1 feature** (no guest agent exists — E-4; a
+  minimal audited guest agent is a P2 addition if a use case demands it).
 
 ### 3.2 Scheduling and host allocation
 
@@ -113,7 +126,7 @@ tenant (platform enumeration, fingerprinting).
   (soft/strict × host/host-group scopes, peer-group semantics, doc 05 §3) drive spread and
   co-location; strict constraints never silently dropped — unsatisfiable ⇒ `pending` with a
   machine-readable reason.
-- **FR-11** — GPU scheduler (phase 2): IOMMU group inventory, MIG partitions, queue with
+- **FR-11** — GPU scheduler (P2): IOMMU group inventory, MIG partitions, queue with
   preemption of CPU workloads.
 - **FR-12** — Drain: host drain (release, maintenance) moves/terminates workloads without
   per-workload manual intervention; tier-R volumes restore from their latest sealed
@@ -162,10 +175,11 @@ tenant (platform enumeration, fingerprinting).
   local performance is the raw device, unallocated and unshaped; the space bound and the
   perf bound are distinct contracts (local = space, network = performance). **Persistent
   volumes (tier R/S, encrypted) are v1** — the stateful-workload path (E-1); runtime
-  attach/detach of a volume to a *running* workload is phase 2.
+  attach/detach of a volume to a *running* workload is P2.
 - **FR-31** — Guest image pipeline: immutable, signed, versioned rootfs; **no tenant-supplied
-  image is executed directly** — it is either rebuilt (controlled build) or run through an
-  intake sandbox (see SEC-40).
+  image is executed directly — v1 executes controlled-rebuild output only** (E-17): tenant
+  OCI images enter via `ImportImage` (asynchronous rebuild into the platform format,
+  FR-32); the intake sandbox is deferred from v1 (on demand, P2 — see SEC-33).
 - **FR-32** — Image import: **structural rejection of backing chains** and of any format
   requiring host file access (lesson R-F22). Imported images are re-packed by the pipeline
   into the platform format.

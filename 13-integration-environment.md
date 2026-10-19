@@ -1,13 +1,16 @@
 # 13 — Integration Environment (Outscale cloud)
 
-Working document — v1, 2026-10-18. Defines and records the **integration environment**:
+Working document — v2, 2026-10-18. Defines and records the **integration environment**:
 PORCHE's "proper infra" simulated on Outscale cloud VMs, used for test and integration
 **before and alongside** the bare-metal PoC. This document is the contract between that
 environment and the design corpus: what it validates, what it deliberately never
 validates, how it is built, and how it is operated.
+**v2 (E-16/E-18)**: the PoC itself executes here — metal keeps every performance and
+security gate; "functionally" for the escape suite made explicit (baseline-delta method).
 
-Related: doc 07 (PoC — stays on real metal for perf gates), doc 12 (software architecture
-validated here), doc 08 A-1/A-9 (the spikes hosted here).
+Related: doc 07 (the PoC — **executes here**, E-16; perf and security evidence stays on
+metal), doc 12 (software architecture validated here), doc 08 A-1/A-9 (the spikes hosted
+here).
 
 ---
 
@@ -15,9 +18,13 @@ validated here), doc 08 A-1/A-9 (the spikes hosted here).
 
 - The integration environment exists to validate **mechanism** — protocol, orchestration,
   state machines, storage stacks, migration — cheaply and repeatably.
-- The PoC (doc 07) exists to validate **performance and kill criteria** on real bare metal.
-- **Neither substitutes for the other.** A number measured in this environment is a smoke
-  test; a gate passed only here has not passed.
+- The **PoC (doc 07) executes here** (E-16): direct-CLH buildability, tier-E attach/wipe,
+  and teardown determinism — the *functional* kill criteria are judged in this environment.
+- **Performance and security evidence** (PERF-1/5/8, residual-memory probe, escape-suite
+  security claims) is measured on **real bare metal** — the metal validation run (E-16) —
+  and never here.
+- A number measured in this environment is a smoke test; a gate passed only here has not
+  passed.
 
 ## 2. Fidelity contract
 
@@ -32,7 +39,7 @@ validated here), doc 08 A-1/A-9 (the spikes hosted here).
 | **A-1 spike**: dm-writecache/dm-era sealable tier-R stack (seal → ship → restore) | doc 04 §3, A-1 gate |
 | **A-9 spike**: CLH live migration between two nodes over TLS, KMS lease extension, cutover state machine, checkpoint fallback | FR-34, E-3, doc 12 §6 |
 | Epoch shipping, `SyncVolume` seals, restore from checkpoint, storage-worker clone | doc 04 |
-| Escape suite "must fail" runs (E-7) — functionally; kernel hardening applies inside the node | SEC-40/SEC-11 |
+| Escape suite "must fail" runs (E-7) — functionally; kernel hardening applies inside the node. "Functionally" = the harness runs and the PoCs exercise the intended surface; **no security claim is inferred** — the baseline-delta evidence (E-18) is metal-only | SEC-40/SEC-11 |
 | Teardown + relaunch loops, wedge detection | doc 01 §8 criteria 6 |
 
 **Never validated here (metal only):**

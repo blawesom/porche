@@ -1,9 +1,11 @@
 # 03 — Simplification Pass: What the New Build Does NOT Re-implement
 
-Working document — v3, 2026-10-18. Analysis and recommendations applied to
+Working document — v4, 2026-10-18. Analysis and recommendations applied to
 `02-architecture.md` (v3). **v2**: tradeoff §4.1 rewritten for the scope change (live
 migration is a v1 goal — doc 08 E-3). **v3 (E-4)**: the Kata/containerd adoption
 recommended here is **superseded** — see §6. C-5/C-6 stand; C-1..C-4 logic inverts.
+**v4 (E-17 + corpus vocabulary sweep)**: §5 item 4 restated — OCI images enter only via
+`ImportImage`; no per-workload OCI pull exists; phase prose switched to P-codes.
 
 **Principle**: every incumbent-design component whose job is already done by an upstream, audited
 Kata/containerd component gets **deleted, not adapted**. The measure of success is the size
@@ -128,12 +130,14 @@ host is upstream, fuzzed, and disposable-per-workload.**
    glue that C-1 deleted returns in reduced form — the honest CT-3 cost of live migration.
    Checkpoint migration (drain = seal + restore) remains the fallback primitive for all tiers.
 2. **Runtime volume attach** — CLH hotplug exists, but v1 simplifies: all volumes defined at
-   workload creation, attach-at-boot only. Runtime attach is a phase-2 addition if a use case
+   workload creation, attach-at-boot only. Runtime attach is a P2 addition if a use case
    demands it.
 3. **Guest-root can kill kata-agent** — same as the incumbent in-guest agent; the host never depends on
    guest cooperation for teardown (CRI stop → VMM kill → key zeroize).
-4. **Image distribution** — OCI pull per workload adds latency; mitigated by a per-host
-   pull-through cache. Must be measured against PERF-1/2 in P0.
+4. **Image distribution** — platform-rootfs distribution per workload adds latency;
+   mitigated by a per-host pull-through cache (base catalog pre-seeded on the host
+   image — doc 02 §8). OCI images now enter only via `ImportImage` (E-17) — no
+   per-workload OCI pull exists. Must be measured against PERF-1/2 in P0.
 5. **Density** — microVM per workload caps at ~100–500/host instead of the incumbent VM-per-process
    density; accepted (that is the isolation trade we chose in doc 06 §1).
 

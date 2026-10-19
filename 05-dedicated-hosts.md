@@ -1,7 +1,8 @@
 # 05 — Dedicated Hosts, User Placement Views, Attract/Repulse Resiliency
 
-Working document — v2, 2026-10-18. **v2**: §7.1 adds live migration as a v1 goal (E-3,
-doc 08 A-9). Adds the hosting model to `02-architecture.md`:
+Working document — v3, 2026-10-18. **v2**: §7.1 adds live migration as a v1 goal (E-3,
+doc 08 A-9). **v3 (vocabulary sweep, E-16..E-21 pass)**: GPU phase prose → P2. Adds the
+hosting model to `02-architecture.md`:
 
 1. **A bare metal host is allocated to exactly one user** (dedicated hosts).
 2. **The user has a view on their hosts and the VM/workload distribution across them.**
@@ -119,7 +120,7 @@ Per workload (order preserved from the legacy slot-locking model):
 
 1. **Candidate set** = owner's allocated hosts (hard boundary, §1.1).
 2. **Hard filters**: strict attract/repulse (peer-group resolution), resources (vCPU/RAM),
-   NVMe budget for tier E/R volumes, GPU availability (phase 2), host state = `allocated`.
+   NVMe budget for tier E/R volumes, GPU availability (P2), host state = `allocated`.
 3. **Preference ordering**: soft attract/repulse, then bin-packing/topology (NUMA, core
    pinning), then load balancing *within* the allocation.
 4. **Commit**: PostgreSQL transaction locking the host row + slots (the legacy

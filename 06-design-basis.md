@@ -1,9 +1,11 @@
 # 06 — Design Basis (self-contained research record)
 
-Working document — v1, 2026-10-17. Consolidates everything the PORCHE documents trace to:
+Working document — v2, 2026-10-18 (v1, 2026-10-17). Consolidates everything the PORCHE
+documents trace to:
 the isolation technology study, the 2021–2026 vulnerability history, the 2026 incumbent-platform
 isolation assessment (findings F0–F45), the legacy base design, and the stack
-decision. **This directory is self-contained**: no external repository is required to read
+decision. **v2**: vocabulary sweep only (GPU phase prose → P2, doc 08 E-16..E-21 pass).
+**This directory is self-contained**: no external repository is required to read
 or extend the PORCHE design docs. (French-language working originals of the research phase
 are kept in `archive/`.)
 
@@ -134,7 +136,7 @@ Hardening essentials:
   kernel ≥ recent 6.x (2026 page-cache cluster); automated CVE feeds + unattended upgrades
   on kernel/runtime.
 - Prereqs: `/dev/kvm` (bare metal), ~64 MB RAM + 1 vCPU baseline per microVM.
-- GPU (phase 2): VFIO passthrough (validate IOMMU groups/BIOS first) or MIG slices on A100.
+- GPU (P2): VFIO passthrough (validate IOMMU groups/BIOS first) or MIG slices on A100.
 
 Validation plan: install on test host → boot < 1 s, minimal `/dev`, no host devices visible →
 run public escape PoCs (all must fail) → 20 parallel sandboxes (< 200 MB RSS each) →

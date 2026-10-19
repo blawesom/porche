@@ -1,12 +1,14 @@
 # 14 — Workload Networking: Data Path, Management, Isolation
 
-Working document — v1, 2026-10-18. Specifies the workload network: the per-host data
+Working document — v2, 2026-10-18. Specifies the workload network: the per-host data
 path, addressing and routing, egress and ingress (IngressRule/EgressRule), enforcement and isolation
 rules, and the management flow. It resolves the last open data-path questions: C-6's CNI
 adoption (superseded — native netns), the F45 VLAN-trust question (doc 02 §8), and the
 IngressRule enforcement point (I-14).
 
 Implements: FR-20/21/22, SEC-7/24, I-7/I-14, E-2 (ingress first-class), E-8 (planes).
+**v2 (E-20)**: static route rows ratified as the v1 route-propagation decision — no BGP
+or any dynamic routing protocol in v1.
 Adversary model (doc 01 §0): the compromised workload itself — it attacks the host, its
 neighbors, and tries to bypass the control plane.
 
@@ -72,8 +74,9 @@ neighbors, and tries to bypass the control plane.
 | Guest config | `ip=<wip>::<gw>:<mask>::eth0:off` on the kernel command line | host-agent builds it |
 
 - **Cross-host**: the root ns routes `wip/32 → <host-fabric-ip>`; routes are desired-state
-  rows distributed by the tenant plane. No overlay, no BGP in v1 (fleet ≤ ~1,000 hosts,
-  static routing suffices); BGP is a later scale seam behind the same route table.
+  rows distributed by the tenant plane. No overlay, no BGP in v1 (E-20: static route rows
+  are the v1 route-propagation decision; fleet ≤ ~1,000 hosts, static routing suffices);
+  BGP is a later scale seam behind the same route table.
 - **Migration cutover** (doc 12 §6): target ready → **route switch** (withdraw on source,
   add on target, atomic in the state store) → IngressRule listeners follow → source teardown.
   The /32 moves with the workload; connections re-establish through the ingress proxy.
@@ -112,7 +115,7 @@ identical for user-defined and platform-allocated ranges.
    could bypass it.
 3. Revocation/migration: listener follows the desired state — closed on the source host,
    opened on the target, in the same transaction as the route switch (§3).
-4. L7 features (TLS termination, host routing) are phase-2 — v1 is L4; the proxy module
+4. L7 features (TLS termination, host routing) are P2 — v1 is L4; the proxy module
    boundary is where L7 lands if ever needed.
 
 ## 6. Security groups (VPC model, adopted v1 — the `SecurityGroup` object, doc 09)

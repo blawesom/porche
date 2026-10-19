@@ -1,10 +1,14 @@
 # 12 — Software Architecture: Control Plane and Host-Side Software
 
-Working document — v1, 2026-10-18. The software-architecture spec A-7 deferred ("a
+Working document — v2, 2026-10-18. The software-architecture spec A-7 deferred ("a
 dedicated doc, post-PoC"); seeded by operator decisions **E-9/E-10** (doc 08 §E).
 It specifies: state authority, order flow, service decomposition, language/stack, and the
 state store. It does **not** re-open the plane model (E-8, doc 02 §3.1) or the data plane
 (E-4/E-5). Requirement references: doc 01 (FR/SEC/PERF/OPS), glossary per doc 11.
+**v2 (E-15/E-17/E-19/E-20)**: A-5 wording aligned with the E-15 re-gate (dev-mode KEK
+P0/P1, HSM/quorum = GA); `build-worker` named as the `ImportImage` rebuild path (E-17);
+console recording added to the host-agent role (E-19); static route rows confirmed as the
+v1 route-propagation decision (E-20).
 
 ---
 
@@ -52,7 +56,7 @@ Three services total; one per plane plus the shared trust anchor:
 | Service | Plane | Contents |
 |---|---|---|
 | **tenant-plane** | tenant | API front (REST + gRPC mirror), **scheduler as in-process component** (shares the placement transaction), per-host desired-state computation, migration workflow state machine, quota enforcement, metering events |
-| **admin-plane** | admin | fleet registry + lifecycle, version registry + deploy gates, image pipeline triggers, monitoring ingestion, user administration |
+| **admin-plane** | admin | fleet registry + lifecycle, version registry + deploy gates, image pipeline triggers (`ImportImage` → controlled rebuild, `build-worker` — E-17), monitoring ingestion, user administration |
 | **KMS** | shared trust anchor (owned by neither plane, E-8) | DEK wrap/unwrap, token minting, host enrollment (attestation-gated) |
 
 - **Scheduler in-process**: PERF-7 (1,000 decisions/s) is one process's transaction budget;
@@ -93,8 +97,9 @@ preserved at the database level (separate credentials; no cross-plane grants).
   story (99.9% = 43 min/month budget — proven by drill before the claim, A-8).
 - **Audit Merkle chain** (SEC-23): append-only table in the `admin` database, fed by both
   planes' events (audit is unified — E-8 rule 5), with periodic head-signing.
-- **KMS state**: wrapped DEKs in the `kms` database; the KEK never enters Postgres (HSM or
-  quorum — A-5, the P1 entry criterion, unchanged).
+- **KMS state**: wrapped DEKs in the `kms` database; the KEK never enters Postgres (A-5
+  as re-gated by E-15: labeled dev-mode KEK authorized for P0/P1; HSM/quorum + key
+  ceremony = the GA gate — in either mode the KEK stays outside Postgres).
 - **Scale check**: ≤ ~1,000 hosts, one user per host — object counts are small; the only
   hot path is transactional order flow/placement, and it is one primary's job by design.
 
@@ -106,6 +111,13 @@ gRPC over mTLS (tonic), **host dials out only** (I-11 — zero inbound ports on 
   events up; reconnect with backoff + full resync of the desired-state table.
 - Orders are idempotent and versioned (client retry-safe — doc 09 conventions); the
   desired-state table makes redelivery harmless (I-12).
+- **Console recording** (FR-6, E-19): the host-agent records each workload's serial
+  console to a per-workload **local** log — lifetime-bounded (destroyed with the workload;
+  ≤ TTL + 24 h for stateful); the tenant reads it over the tenant channel for their own
+  workloads. No central console store exists in v1.
+- **Route rows** (E-20): cross-host workload /32 routes are desired-state rows compiled
+  into each host's root ns (doc 14 §3) — static, no BGP or dynamic routing protocol in
+  v1; the route table stays the seam where BGP enters later.
 - **Migration workflow** (FR-34, E-3) runs as a state machine in the tenant-plane service:
   `requested → preparing (target: volume lease + KMS scoped unwrap) → transferring (CLH
   live migration) → cutover → done`, with **checkpoint migration as the failure fallback**
