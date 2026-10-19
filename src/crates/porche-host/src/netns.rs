@@ -2,13 +2,18 @@
 //! measures — E-22/E-25; cross-host fabric, proxies and rules are deferred, doc 07
 //! §3):
 //!
-//! - one netns per workload (`w-<id>`), the tap never leaves it — CLH runs jailed
-//!   inside (SEC-12/13: process and network boundary coincide);
-//! - veth root side enslaved to `brporche` with **isolated on, hairpin off** — no
-//!   workload↔workload L2 at all;
-//! - the tap carries the gateway /64; the guest holds the /128 (cmdline key);
-//! - nftables anti-spoof: from the tap, exactly one allowed source MAC and one
-//!   allowed v6 source (SEC-43 subset) — everything else drops.
+//! - one netns per workload (`w-<id>`) — CLH runs jailed inside (SEC-12/13:
+//!   process and network boundary coincide);
+//! - **`tap-<id>` is a real TUN/TAP device** (CLH attaches via `/dev/net/tun` +
+//!   TUNSETIFF — a veth peer cannot be opened as a tap; observed on v54);
+//! - the tap bridges to the uplink veth through an **in-netns bridge** `br-<id>`;
+//!   the root-side veth `vr-<id>` is enslaved to `brporche` with **isolated on**
+//!   (no workload↔workload L2 at all);
+//! - the in-netns bridge carries the gateway /64; the guest holds the /128
+//!   (cmdline key, E-25);
+//! - anti-spoof (SEC-43 subset) rides the **netdev family ingress hook bound to
+//!   the tap** — it sees guest frames before any bridging, exactly one allowed
+//!   source MAC and one allowed v6 source, everything else drops.
 //!
 //! All argv are built here as data and unit-tested; execution happens on the node.
 
@@ -25,18 +30,28 @@ pub fn tap_name(id: &str) -> String {
     format!("tap-{id}")
 }
 
-pub fn veth_name(id: &str) -> String {
-    format!("veth-{id}")
+/// In-netns bridge (tap ↔ uplink veth).
+pub fn nsbr_name(id: &str) -> String {
+    format!("br-{id}")
 }
 
-/// Idempotent bridge bring-up is owned by the executor (`exec.rs` runs `ip link show`
-/// first): WS-A applies it at node setup; the agent re-converges on every create.
+/// Veth root side — enslaved to brporche, isolated.
+pub fn veth_root(id: &str) -> String {
+    format!("vr-{id}")
+}
 
-/// The netns + port isolation + anti-spoof sequence for one workload.
+/// Veth netns side — enslaved to the in-netns bridge.
+pub fn veth_ns(id: &str) -> String {
+    format!("ve-{id}")
+}
+
+/// The netns + tap + bridges + anti-spoof sequence for one workload.
 pub fn commands(spec: &WorkloadSpec) -> Vec<CommandSpec> {
     let ns = ns_name(&spec.id);
     let tap = tap_name(&spec.id);
-    let veth = veth_name(&spec.id);
+    let nsbr = nsbr_name(&spec.id);
+    let vr = veth_root(&spec.id);
+    let ve = veth_ns(&spec.id);
     let mac = spec.assigned_mac();
     let gw_prefix = format!("{}/64", spec.gw6);
 
@@ -47,29 +62,51 @@ pub fn commands(spec: &WorkloadSpec) -> Vec<CommandSpec> {
     };
 
     vec![
-        // netns + veth pair; tap side moves into the netns
+        // netns + uplink veth pair; netns side moves in
         CommandSpec::new(&["ip", "netns", "add", &ns]),
-        CommandSpec::new(&["ip", "link", "add", &veth, "type", "veth", "peer", "name", &tap]),
-        CommandSpec::new(&["ip", "link", "set", &tap, "netns", &ns]),
-        // root side: enslaved to the bridge, isolated, up (no workload↔workload L2)
-        CommandSpec::new(&["ip", "link", "set", &veth, "master", BRIDGE]),
-        CommandSpec::new(&["bridge", "link", "set", "dev", &veth, "isolated", "on"]),
-        CommandSpec::new(&["ip", "link", "set", &veth, "up"]),
-        // netns side: loopback + tap up, gateway /64 on the tap
+        CommandSpec::new(&["ip", "link", "add", &vr, "type", "veth", "peer", "name", &ve]),
+        CommandSpec::new(&["ip", "link", "set", &ve, "netns", &ns]),
+        // root side: enslaved to brporche, isolated, up (no workload↔workload L2)
+        CommandSpec::new(&["ip", "link", "set", &vr, "master", BRIDGE]),
+        CommandSpec::new(&["bridge", "link", "set", "dev", &vr, "isolated", "on"]),
+        CommandSpec::new(&["ip", "link", "set", &vr, "up"]),
+        // netns side: real tap + in-netns bridge, tap and veth enslaved to it
+        in_ns(&["ip", "tuntap", "add", "dev", &tap, "mode", "tap"]),
+        in_ns(&["ip", "link", "add", &nsbr, "type", "bridge"]),
+        in_ns(&["ip", "link", "set", &tap, "master", &nsbr]),
+        in_ns(&["ip", "link", "set", &ve, "master", &nsbr]),
         in_ns(&["ip", "link", "set", "lo", "up"]),
+        in_ns(&["ip", "link", "set", &nsbr, "up"]),
         in_ns(&["ip", "link", "set", &tap, "up"]),
-        in_ns(&["ip", "addr", "add", &gw_prefix, "dev", &tap]),
-        // anti-spoof (SEC-43 subset): default-drop input from the tap, allow exactly
-        // the assigned MAC and the assigned /128
-        in_ns(&["nft", "add", "table", "ip6", "porche"]),
-        in_ns(&["nft", "add", "chain", "ip6", "porche", "input", "{ type filter hook input priority 0 ; policy accept ; }"]),
-        in_ns(&["nft", "add", "rule", "ip6", "porche", "input", "iifname", &tap, "ether", "saddr", "!=", &mac, "drop"]),
-        in_ns(&["nft", "add", "rule", "ip6", "porche", "input", "iifname", &tap, "ip6", "saddr", "!=", &spec.ip6, "drop"]),
+        in_ns(&["ip", "link", "set", &ve, "up"]),
+        // gateway /64 on the in-netns bridge (the guest's <gw>, E-25)
+        in_ns(&["ip", "addr", "add", &gw_prefix, "dev", &nsbr]),
+        // anti-spoof (SEC-43 subset): netdev ingress hook BOUND to the tap —
+        // guest frames filtered before any bridging; exactly one allowed MAC
+        // and one allowed v6 source
+        in_ns(&["nft", "add", "table", "netdev", "porche"]),
+        in_ns(&[
+            "nft",
+            "add",
+            "chain",
+            "netdev",
+            "porche",
+            "antispoof",
+            &format!("{{ type filter hook ingress device {tap} priority 0 ; }}"),
+        ]),
+        in_ns(&[
+            "nft", "add", "rule", "netdev", "porche", "antispoof",
+            "ether", "saddr", "!=", &mac, "drop",
+        ]),
+        in_ns(&[
+            "nft", "add", "rule", "netdev", "porche", "antispoof",
+            "ip6", "saddr", "!=", &spec.ip6, "drop",
+        ]),
     ]
 }
 
-/// Netns teardown (part of the FR-3 sequence — `ip netns del` removes the veth pair
-/// and the nft table with it).
+/// Netns teardown (part of the FR-3 sequence — `ip netns del` removes the veth
+/// pair, the tap, the in-netns bridge and the nft table with it).
 pub fn remove_commands(id: &str) -> Vec<CommandSpec> {
     vec![CommandSpec::new(&["ip", "netns", "del", &ns_name(id)])]
 }
@@ -95,31 +132,41 @@ mod tests {
     #[test]
     fn derived_names_stay_under_ifname_limit() {
         let s = spec();
-        assert!(ns_name(&s.id).len() <= 15);
-        assert!(tap_name(&s.id).len() <= 15);
-        assert!(veth_name(&s.id).len() <= 15);
+        for n in [
+            ns_name(&s.id),
+            tap_name(&s.id),
+            nsbr_name(&s.id),
+            veth_root(&s.id),
+            veth_ns(&s.id),
+        ] {
+            assert!(n.len() <= 15, "{n}");
+        }
     }
 
     #[test]
-    fn commands_isolate_the_port_and_antispoof() {
+    fn commands_build_a_real_tap_bridged_to_the_uplink() {
         let cmds = commands(&spec());
         let flat: Vec<String> = cmds.iter().map(|c| c.display()).collect();
         let joined = flat.join("\n");
-        assert!(joined.contains("bridge link set dev veth-w1 isolated on"));
+
+        // the tap is a TUN/TAP device, created inside the netns (CLH attaches via
+        // /dev/net/tun — a veth peer cannot serve as a tap)
+        assert!(joined.contains("ip netns exec w-w1 ip tuntap add dev tap-w1 mode tap"));
+        // in-netns bridge carries tap + veth + the gateway
+        assert!(joined.contains("ip link add br-w1 type bridge"));
+        assert!(joined.contains("ip link set tap-w1 master br-w1"));
+        assert!(joined.contains("ip link set ve-w1 master br-w1"));
+        assert!(joined.contains("ip addr add fd00:abcd::ff/64 dev br-w1"));
+        // root side: isolated port on the host bridge
+        assert!(joined.contains("bridge link set dev vr-w1 isolated on"));
+        // anti-spoof: netdev ingress hook bound to the tap, one MAC + one v6
+        assert!(joined.contains("netdev porche antispoof"));
+        assert!(joined.contains("hook ingress device tap-w1 priority 0"));
         assert!(joined.contains(&format!("ether saddr != 02:00:00:00:00:01 drop")), "{joined}");
         assert!(joined.contains("ip6 saddr != fd00:abcd::1 drop"));
-        // the tap is only touched root-side by its creation and its move into the
-        // netns; everything else goes through `ip netns exec`
-        for line in flat {
-            if !line.starts_with("ip netns exec") && line.contains("tap-w1") {
-                assert!(
-                    line.contains("netns w-w1") || line.contains("type veth peer name"),
-                    "tap configured outside the netns: {line}"
-                );
-            }
-        }
-        // hairpin never appears
+        // hairpin never appears; no VLANs anywhere
         assert!(!joined.contains("hairpin"));
+        assert!(!joined.contains("vlan"));
     }
 
     #[test]

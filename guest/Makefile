@@ -56,8 +56,10 @@ $(DL)/$(KVER)/.config: $(DL)/$(KVER).tar.xz $(BUILD)/kernel-fragment.config
 
 $(OUT)/kernel: $(DL)/$(KVER)/.config
 	mkdir -p $(OUT)
-	$(MAKE) -C $(DL)/$(KVER) -j$(JOBS) vmlinux
-	cp $(DL)/$(KVER)/vmlinux $@
+	# bzImage, not vmlinux: CLH boots it via the Linux boot protocol (the raw
+	# ELF demands a PVH header — observed on v54)
+	$(MAKE) -C $(DL)/$(KVER) -j$(JOBS) bzImage
+	cp $(DL)/$(KVER)/arch/x86/boot/bzImage $@
 	$(MAKE) -C $(DL)/$(KVER) -j$(JOBS) clean
 
 kernel: $(OUT)/kernel

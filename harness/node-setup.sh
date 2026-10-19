@@ -67,12 +67,15 @@ command -v nft > /dev/null 2>&1 || dnf install -y -q nftables
 command -v cryptsetup > /dev/null 2>&1 || dnf install -y -q cryptsetup
 command -v nft > /dev/null 2>&1 || { echo "FATAL: nft unusable"; exit 1; }
 command -v cryptsetup > /dev/null 2>&1 || { echo "FATAL: cryptsetup unusable"; exit 1; }
-for m in bridge veth nf_tables dm_mod dm_crypt loop; do
+for m in bridge veth nf_tables dm_mod dm_crypt loop tun; do
     modprobe "$m" 2>/dev/null || true
 done
-for m in bridge veth nf_tables dm_mod dm_crypt loop; do
+for m in bridge veth nf_tables dm_mod dm_crypt loop tun; do
     [ -d "/sys/module/$m" ] || { echo "FATAL: kernel module $m not present — refusing to seal"; exit 1; }
 done
+# the TUN/TAP device node (CLH attaches to taps via /dev/net/tun)
+[ -e /dev/net/tun ] || mknod /dev/net/tun c 10 200
+[ -w /dev/net/tun ] || { echo "FATAL: /dev/net/tun unusable"; exit 1; }
 # exercise them for real: veth pair + nft table + the workload bridge
 ip link add porche-warmup type veth peer name porche-warmup2 2>/dev/null || true
 ip link del porche-warmup 2>/dev/null || true

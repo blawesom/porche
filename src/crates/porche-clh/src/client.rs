@@ -81,14 +81,45 @@ impl ClhClient {
         );
 
         let mut stream = UnixStream::connect(&self.socket)?;
+        // Fail loudly instead of hanging: the VMM is local — 10 s is already gross.
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(10)))?;
         stream.write_all(req.as_bytes())?;
-        // Connection: close → the server closes after the body; read to EOF.
-        let mut raw = String::new();
-        stream.read_to_string(&mut raw)?;
 
-        let (head, payload) = raw
-            .split_once("\r\n\r\n")
-            .ok_or_else(|| ClhError::Bad("no header/body separator".into()))?;
+        // Read the response by protocol, NOT to EOF: the VMM keeps the connection
+        // open after responding (observed on v54 — an EOF-based read hangs forever).
+        let mut buf: Vec<u8> = Vec::new();
+        let mut chunk = [0u8; 4096];
+        let head_end = loop {
+            if let Some(pos) = find_subslice(&buf, b"\r\n\r\n") {
+                break pos;
+            }
+            let n = stream.read(&mut chunk)?;
+            if n == 0 {
+                return Err(ClhError::Bad("connection closed before headers".into()));
+            }
+            buf.extend_from_slice(&chunk[..n]);
+        };
+
+        let head = String::from_utf8_lossy(&buf[..head_end]).into_owned();
+        let content_length: usize = head
+            .lines()
+            .find_map(|l| {
+                let (k, v) = l.split_once(':')?;
+                k.trim()
+                    .eq_ignore_ascii_case("content-length")
+                    .then(|| v.trim().parse().ok())
+                    .flatten()
+            })
+            .unwrap_or(0);
+        let body_start = head_end + 4;
+        while buf.len() < body_start + content_length {
+            let n = stream.read(&mut chunk)?;
+            if n == 0 {
+                break; // short body — surface what we have; status check decides
+            }
+            buf.extend_from_slice(&chunk[..n]);
+        }
+
         let status_line = head
             .lines()
             .next()
@@ -98,14 +129,22 @@ impl ClhClient {
             .nth(1)
             .and_then(|c| c.parse().ok())
             .ok_or_else(|| ClhError::Bad(format!("bad status line: {status_line}")))?;
+        let payload = String::from_utf8_lossy(&buf[body_start..]).into_owned();
         if !(200..300).contains(&code) {
             return Err(ClhError::Status {
                 code,
-                body: payload.to_string(),
+                body: payload,
             });
         }
-        Ok(payload.to_string())
+        Ok(payload)
     }
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() || needle.len() > haystack.len() {
+        return None;
+    }
+    haystack.windows(needle.len()).position(|w| w == needle)
 }
 
 #[cfg(test)]
@@ -156,9 +195,11 @@ mod tests {
                 }
             }
             let _ = buf;
-            let resp = format!("HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}", reply.len());
+            let resp = format!("HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n{reply}", reply.len());
             conn.write_all(resp.as_bytes()).unwrap();
-            let _ = conn.shutdown(std::net::Shutdown::Write);
+            // keep the connection OPEN after responding — the client must complete
+            // by Content-Length, never by EOF (the real VMM keeps it open: v54)
+            std::thread::sleep(std::time::Duration::from_secs(2));
             tx.send(head).unwrap();
         });
         (rx, ())

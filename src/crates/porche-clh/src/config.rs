@@ -32,36 +32,40 @@ pub struct VmConfig {
 }
 
 impl VmConfig {
-    /// Serialize to the CLH API JSON shape (v54 openapi subset).
-    ///
-    /// NOTE (WS-C verify-on-node): field names and units mirror the v54 openapi as
-    /// documented; the first on-node burst pins them against a live socket and this
-    /// function is corrected in the same commit if they differ.
+    /// Serialize to the CLH v54 API JSON shape — aligned with the v54 openapi
+    /// (vmm/src/api/openapi/cloud-hypervisor.yaml) and verified on the node
+    /// (2026-10-19): payload is plain strings, net is an ARRAY, serial is
+    /// {mode,file}, memory.size is BYTES, v54 offload flags are tso/ufo/csum.
     pub fn to_clh_json(&self) -> String {
-        let mut obj = serde_json::json!({
-            "cpus":   { "boot_vcpus": self.vcpu, "max_vcpus": self.vcpu },
-            "memory": { "size": self.ram_mib },
-            "kernel":    { "path": self.kernel_path },
-            "initramfs": { "path": self.initramfs_path },
-            "cmdline":   { "args": self.cmdline },
-            "disks": self.disks.iter()
-                .map(|p| serde_json::json!({ "path": p }))
-                .collect::<Vec<_>>(),
-            "net": {
-                "ifs": [ {
-                    "mac": self.mac,
-                    "tap": self.tap,
-                } ]
-            },
-            "serial": { "console": { "file": self.console_log, "mode": "ReadWrite" } },
+        let mut net_if = serde_json::json!({
+            "mac": self.mac,
+            "tap": self.tap,
         });
         if self.offloads_off {
-            // SEC-7: the PwnEscape vector closed at the virtio-net end.
-            obj["net"]["ifs"][0]["offload_tso"] = serde_json::json!(false);
-            obj["net"]["ifs"][0]["offload_gso"] = serde_json::json!(false);
-            obj["net"]["ifs"][0]["offload_gro"] = serde_json::json!(false);
-            obj["net"]["ifs"][0]["offload_ufo"] = serde_json::json!(false);
+            // SEC-7: the PwnEscape vector closed at the virtio-net end. v54's
+            // defaults are already false — the E-7/E-18 delta run flips them ON
+            // for the unhardened baseline.
+            net_if["offload_tso"] = serde_json::json!(false);
+            net_if["offload_ufo"] = serde_json::json!(false);
+            net_if["offload_csum"] = serde_json::json!(false);
         }
+        let mut payload = serde_json::json!({
+            "kernel": self.kernel_path,
+            "cmdline": self.cmdline,
+        });
+        if !self.initramfs_path.is_empty() {
+            payload["initramfs"] = serde_json::json!(self.initramfs_path);
+        }
+        let obj = serde_json::json!({
+            "cpus":   { "boot_vcpus": self.vcpu, "max_vcpus": self.vcpu },
+            "memory": { "size": (self.ram_mib as u64) << 20 },
+            "payload": payload,
+            "disks": self.disks.iter()
+                .map(|p| serde_json::json!({ "path": p, "image_type": "Raw" }))
+                .collect::<Vec<_>>(),
+            "net": [ net_if ],
+            "serial": { "mode": "File", "file": self.console_log },
+        });
         serde_json::to_string(&obj).expect("vm config serializes")
     }
 }
@@ -153,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    fn clh_json_has_the_frozen_surface_and_offloads_off() {
+    fn clh_json_matches_v54_openapi_shape() {
         let cfg = VmConfig {
             vcpu: 1,
             ram_mib: 64,
@@ -169,11 +173,16 @@ mod tests {
         let json: serde_json::Value =
             serde_json::from_str(&cfg.to_clh_json()).expect("valid json");
         assert_eq!(json["cpus"]["boot_vcpus"], 1);
-        assert_eq!(json["memory"]["size"], 64);
+        assert_eq!(json["memory"]["size"], 64u64 << 20); // v54: bytes
+        assert_eq!(json["payload"]["kernel"], "/var/lib/porche/images/<digest>/kernel");
+        assert_eq!(json["payload"]["cmdline"], build_cmdline(&spec()));
         assert_eq!(json["disks"][0]["path"], "/dev/mapper/porche-w1");
-        assert_eq!(json["net"]["ifs"][0]["tap"], "tap-w1");
-        assert_eq!(json["net"]["ifs"][0]["offload_tso"], false);
-        assert_eq!(json["net"]["ifs"][0]["offload_gso"], false);
-        assert_eq!(json["serial"]["console"]["file"], "/var/lib/porche/consoles/w1.log");
+        assert_eq!(json["disks"][0]["image_type"], "Raw"); // v54: required at boot
+        assert_eq!(json["net"].as_array().unwrap().len(), 1); // v54: net is a sequence
+        assert_eq!(json["net"][0]["tap"], "tap-w1");
+        assert_eq!(json["net"][0]["offload_tso"], false);
+        assert_eq!(json["net"][0]["offload_csum"], false);
+        assert_eq!(json["serial"]["mode"], "File");
+        assert_eq!(json["serial"]["file"], "/var/lib/porche/consoles/w1.log");
     }
 }
