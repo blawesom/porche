@@ -39,7 +39,7 @@ the design.
 | 11 | [glossary](11-glossary.md) | Controlled-language contract: one word one meaning, RFC 2119 keywords, procedure writing rules |
 | 12 | [software architecture](12-software-architecture.md) | Control-plane and host-side software: state authority, order flow (no bus in v1), three services, Rust/tonic/sqlx, Postgres HA |
 | 13 | [integration environment](13-integration-environment.md) | The "proper infra" simulated on Outscale cloud: topology, fidelity contract, provisioning recipe, operations |
-| 14 | [workload networking](14-workload-networking.md) | Workload data path: netns/isolated-bridge, routed /32, egress/ingress proxies, enforcement rules, threat-model walkthrough |
+| 14 | [workload networking](14-workload-networking.md) | Workload data path: IPv6-first (routed /128, ULA per VPC), netns/isolated-bridge, egress/ingress proxies, enforcement rules, threat-model walkthrough |
 
 Read order for a new session: **06 → 01 → 02**, then 03/04/05/07/08 as needed; the
 software architecture is **12** (after 02).

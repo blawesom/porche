@@ -1,12 +1,13 @@
 # 11 — Glossary and Controlled-Language Rules
 
-Working document — v4, 2026-10-18. One word, one meaning — the lightweight controlled-English
+Working document — v5, 2026-10-18. One word, one meaning — the lightweight controlled-English
 contract (inspired by ASD-STE100, without its full cost; see doc 08 discussion). Applies to
 the whole corpus from this version on. Legacy uses that predate this glossary are superseded
 by the definitions below. **v2**: migration terms redefined — live migration is in scope
 as a v1 goal (E-3, doc 08). **v3 (E-8)**: control plane split into planes.
 **v4 (E-16/E-17)**: *metal validation run* and *smoke signal* added; *intake sandbox*
 marked deferred (dangling doc-02 §3.2 pointer fixed); P-codes added.
+**v5 (E-22..E-24)**: *IPv6-first*, *legacy-v4 workload*, *attached IPv4*, *ULA* added.
 
 ---
 
@@ -49,6 +50,10 @@ In doc 01 (and wherever requirements are restated):
 | **ingress rule** | The API object that allows inbound access to one workload port from a source range (doc 09 — IngressRule). Created and revoked through the control API only — never from the guest. | guest-initiated port opening, firewall edits from inside the workload |
 | **egress rule** | The API object that allows outbound internet access to one destination — FQDN or CIDR (doc 09 — EgressRule). Enforced by the egress proxy, DNS included. | intra-VPC rules (say *security group*) |
 | **security group** | The API object holding east-west rules within a VPC (doc 09 — SecurityGroup). Compiled to netns nftables. | internet-facing rules (say *ingress rule* / *egress rule*) |
+| **IPv6-first** | The workload network family model (E-22): one v6 /128 per workload, ULA /48 per VPC; IPv4 exists only at the edge (attached public v4, egress NAT) or as the bounded legacy-v4 exception. | "dual-stack by default" |
+| **legacy-v4 workload** | A workload that additionally holds one v4 /32 from the user's RFC1918 range (E-23) — opt-in, documented debt, quota-bound. Every workload still has a v6 /128; v4 is additive. | the default workload model |
+| **attached IPv4** | A platform-pool public v4 bound 1:1 to one workload, both directions, enforced at the per-host proxies (E-24). | any v4 address inside the deployment |
+| **ULA** | Unique local address (RFC 4193, `fd00::/8`) — the VPC v6 prefix family. | GUA (not delegated in v1) |
 | **allocation** | The binding of one host to one user (SEC-16; doc 05). | — |
 | **tier** | Volume durability: E / R / S (doc 04). Nothing else is a tier. | performance level, storage location |
 | **class** | Storage location/cost of a remote copy: hot / cold (doc 04 §2.2). | durability (say *tier*) |

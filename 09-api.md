@@ -1,12 +1,14 @@
 # 09 — API: Object Catalog (CRUD + Main Attributes)
 
-Working document — v5, 2026-10-18. Resolves challenge B-3 (doc 08): the PORCHE API
+Working document — v6, 2026-10-18. Resolves challenge B-3 (doc 08): the PORCHE API
 specified as **objects with CRUD and main attributes** — deliberately at attribute level,
 not full OpenAPI, until P0 feedback. Fills out FR-40. **v2**: Exposure object added
 (ingress first-class v1 — E-2). **v3 (E-8)**: two API surfaces — tenant and admin.
 **v4 (E-14)**: Exposure renamed **IngressRule** (+ `source_cidrs`); **EgressRule** and
 **SecurityGroup** objects added. **v5 (E-17/E-21)**: Image create = **`ImportImage` →
 controlled rebuild** (never direct execution); **v1 API surface frozen at E-14**.
+**v6 (E-22..E-25)**: IPv6-first — `Vpc.prefix6` (ULA), Workload `ip6`/`ip4`/`public_ipv4`,
+new **PublicIpv4** object, family-agnostic rule ranges.
 
 Transport: HTTPS REST + gRPC mirror; AuthN per SEC-20 (short-lived tokens, rotation);
 every call audit-logged (SEC-23). Scope: every object and attribute is visible only to its
@@ -56,14 +58,14 @@ operator-owned mutations where relevant.
 
 | | |
 |---|---|
-| Attributes | `id`, `user`, `cidr` (RFC1918 — user-requested or platform-allocated, FR-23), `subnets` (refs), `state` (active/deleting) |
-| CRUD | create (request a range — validated non-overlapping fleet-wide, E-13), read (own), update (add/remove subranges), delete (only when no workload /32s remain) |
-| Notes | spans the user's entire allocation; workload /32s are assigned from it (doc 14 §3); overlap rejections carry machine-readable reasons |
+| Attributes | `id`, `user`, `prefix6` (**ULA /48–/56**, RFC 4193 — user-requested or platform-allocated, FR-23/E-22), `cidr4` (RFC1918 /24–/16 — **legacy-v4 enablement only**, E-23; absent = no v4 in this VPC), `subnets` (refs), `state` (active/deleting) |
+| CRUD | create (request prefixes — validated non-overlapping fleet-wide, E-22/E-23), read (own), update (add/remove subranges), delete (only when no workload addresses remain) |
+| Notes | spans the user's entire allocation; workload **/128s** are assigned from `prefix6` (doc 14 §3); overlap rejections carry machine-readable reasons |
 
 ### Workload
 | | |
 |---|---|
-| Attributes | `id`, `user`, `image` (digest), `command`, `volumes` (refs), `vcpu`, `ram`, `affinity_tags`, `ttl`, `state` (pending/scheduled/starting/running/stopped/failed/reaped), `placement` (host, reason — incl. pending cause), `ingress_rules`, `security_groups` (refs), `console_ref`, `events` |
+| Attributes | `id`, `user`, `image` (digest), `command`, `volumes` (refs), `vcpu`, `ram`, `affinity_tags`, `ttl`, `state` (pending/scheduled/starting/running/stopped/failed/reaped), `placement` (host, reason — incl. pending cause), `ip6` (/128 — always present, E-22), `ip4` (nullable /32 — legacy exception, E-23), `public_ipv4` (ref, nullable — E-24), `ingress_rules`, `security_groups` (refs), `console_ref`, `events` |
 | CRUD | create (FR-1), read (own, incl. `GetPlacementDecisions`, `GetResilienceReport` projections), update (limited: stop/start, migrate — FR-34, re-tag), delete (deterministic teardown FR-3) |
 
 ### Volume
@@ -82,15 +84,15 @@ operator-owned mutations where relevant.
 
 | | |
 |---|---|
-| Attributes | `id`, `user`, `workload`, `protocol` (tcp/udp), `guest_port`, `external_port`, `source_cidrs` (default 0.0.0.0/0), `state` (active/revoked), `created_at`, `revoked_at` |
+| Attributes | `id`, `user`, `workload`, `protocol` (tcp/udp), `guest_port`, `external_port`, `source_ranges` (family-agnostic CIDR list — v4 or v6; default all, E-22/E-24), `state` (active/revoked), `created_at`, `revoked_at` |
 | CRUD | create (explicit, auditable — FR-20), read (own), update (revoke), delete (revoke) |
-| Notes | inbound access from outside the VPC; enforced by the per-host ingress proxy (I-14) — a revoked rule means **no listener exists**; created/changed/revoked through the control API only, never from the guest (E-2) |
+| Notes | inbound access from outside the VPC; enforced by the per-host ingress proxy (I-14) — a revoked rule means **no listener exists**; listeners bind the workload's fabric identity and, if attached, its **attached IPv4** (E-24) — v4 clients reaching a v6 listener is the normal case; created/changed/revoked through the control API only, never from the guest (E-2) |
 
 ### EgressRule
 
 | | |
 |---|---|
-| Attributes | `id`, `user`, `vpc`, `workload` (nullable — null = VPC default), `destination` (fqdn | cidr), `protocol`, `port`, `state` (active/revoked) |
+| Attributes | `id`, `user`, `vpc`, `workload` (nullable — null = VPC default), `destination` (fqdn | cidr — family-agnostic, E-22), `protocol`, `port`, `state` (active/revoked) |
 | CRUD | create, read (own), update (revoke), delete (revoke) |
 | Notes | outbound internet access; enforced by the transparent egress proxy — **DNS is resolved by the proxy**, so FQDN rules cannot be bypassed by raw IP (doc 14 §4); empty set + no VPC default = no egress |
 
@@ -98,9 +100,17 @@ operator-owned mutations where relevant.
 
 | | |
 |---|---|
-| Attributes | `id`, `user`, `vpc`, `name`, `rules[]` (direction in/out, protocol, from/to port, cidr — within the user's VPC CIDR) |
+| Attributes | `id`, `user`, `vpc`, `name`, `rules[]` (direction in/out, protocol, from/to port, cidr — family-agnostic, within the user's VPC ranges: v6 default, v4 only between legacy-v4 workloads) |
 | CRUD | create, read (own), update (rules), delete (when unreferenced) |
 | Notes | east-west, workload ↔ workload within the VPC; attached to workloads at create (attachment immutable per workload in v1, like volumes); compiled to netns nftables (doc 14 §6); default deny |
+
+### PublicIpv4
+
+| | |
+|---|---|
+| Attributes | `address` (v4, platform pool), `workload` (ref, nullable), `state` (available/attached) |
+| CRUD | create (operator — pool), attach/detach (tenant, to own workloads — **1:1, both directions**, E-24), read (own attachments; operators see the pool), delete (operator) |
+| Notes | inbound = ingress-proxy listener on the attached v4 (I-14 — the sole enforcement point, no DNAT bypass); outbound = SNAT through it so return traffic matches; moves with the workload on migration (same transaction as the route switch); quota `max_public_ipv4` (FR-5) |
 
 ### Image
 | | |
@@ -111,7 +121,7 @@ operator-owned mutations where relevant.
 ### Quota
 | | |
 |---|---|
-| Attributes | `user`, `max_vcpu`, `max_ram`, `max_workloads`, `max_local_nvme`, `max_network_storage`, `max_egress`, `max_ttl` |
+| Attributes | `user`, `max_vcpu`, `max_ram`, `max_workloads`, `max_local_nvme`, `max_network_storage`, `max_egress`, `max_ttl`, `max_legacy_ipv4` (workload count, E-23), `max_public_ipv4` (attachments, E-24) |
 | CRUD | read (own), update (operator) |
 
 ---

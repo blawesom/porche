@@ -1,6 +1,6 @@
 # 01 — Requirements Specification
 
-Working document — v7, 2026-10-18. First normative document of the PORCHE project.
+Working document — v8, 2026-10-18. First normative document of the PORCHE project.
 **v2** (doc 08 E-1..E-3): stateful enterprise workloads and ingress access
 are first-class v1 citizens; live migration is a v1 goal.
 **v3** (doc 08 E-4): **Cloud Hypervisor, directly orchestrated, is the single runtime** —
@@ -17,6 +17,10 @@ security *evidence* stays metal-only (E-16); FR-1/FR-31 restated — v1 executes
 controlled-rebuild output only (`ImportImage` for tenant OCI images; intake sandbox
 deferred, E-17); FR-6 console recording is host-local and lifetime-bounded (E-19); phase
 vocabulary switched to P-codes.
+**v8** (doc 08 E-22..E-25): **IPv6-first workload network** — one v6 /128 per workload,
+ULA /48 per VPC; v4 exists only at the edge (attached 1:1 public IPv4, E-24) or as the
+bounded legacy-v4 exception (E-23); FR-20/FR-23/FR-41 restated family-neutral; SEC-43
+added.
 
 **Conventions (RFC 2119, doc 11 §1)**: every FR/SEC/PERF/OPS statement is **MUST** —
 normative, violation is a defect — unless explicitly marked **SHOULD** (deviation requires
@@ -54,6 +58,10 @@ tenant (platform enumeration, fingerprinting).
   metering), plus the **workload data plane** (hosts, microVMs, per-host proxies, storage
   shards — tenant traffic never transits a control plane).
 - A set of verifiable security guarantees (every SEC requirement is testable).
+- An **IPv6-first workload network** (E-22): workloads address each other with IPv6
+  (one /128 per workload, ULA /48 per VPC); IPv4 exists **only at the edge** — attached
+  1:1 public addresses (E-24) and egress NAT — and as a **bounded legacy-v4 exception**
+  for migration cases (E-23).
 
 ### 1.2 What PORCHE is not (non-goals)
 
@@ -105,7 +113,8 @@ tenant (platform enumeration, fingerprinting).
   Verification therefore means "no *cryptographically recoverable* data".
 - **FR-4** — Guaranteed delay between "API accepts" and "process visible inside the guest":
   P50 < 1.5 s, P99 < 5 s (see PERF-1).
-- **FR-5** — Per-tenant quotas: vCPU, RAM, workload count, egress, **local NVMe space**,
+- **FR-5** — Per-tenant quotas: vCPU, RAM, workload count, egress, **legacy-v4 workload
+  count (E-23)**, **attached-IPv4 count (E-24)**, **local NVMe space**,
   **storage-network reservations (network tiers only)**, max lifetime (mandatory TTL —
   **policy per workload class** (E-9): enforced locally on the host, fail-safe under
   partition; operator-waivable for stateful workloads (U4); never waivable by tenant
@@ -141,22 +150,29 @@ tenant (platform enumeration, fingerprinting).
 
 ### 3.3 Networking
 
-- **FR-20** — Default egress NAT through an **authenticated, filtered** proxy governed by
-  **EgressRule objects** (doc 09: per-workload or VPC-default allow-list of FQDNs/CIDRs;
-  DNS resolved by the proxy — a name rule cannot be bypassed by raw IP); **no ingress by
-  default**, but inbound access is a **first-class v1 capability** (E-2) governed by
+- **FR-20** — Default egress through an **authenticated, filtered** proxy governed by
+  **EgressRule objects** (doc 09: per-workload or VPC-default allow-list of FQDNs/CIDRs —
+  family-agnostic destinations; DNS resolved by the proxy — a name rule cannot be
+  bypassed by raw IP); the proxy **re-originates in whatever family the destination
+  requires** (E-22 — no NAT64/DNS64; the guest never sees IPv4), sourcing from the host
+  egress address or the workload's **attached IPv4** (E-24). **No ingress by default**,
+  but inbound access is a **first-class v1 capability** (E-2) governed by
   **IngressRule objects** (doc 09): explicit, auditable, revocable, enforced by the
-  per-host data path, never by guest cooperation. Both rule types are created, changed,
-  and revoked **through the control API only** — the guest has no path to open, alter, or
-  close one (a compromised workload cannot widen its own network surface).
+  per-host data path (source ranges family-agnostic), never by guest cooperation. Both
+  rule types are created, changed, and revoked **through the control API only** — the
+  guest has no path to open, alter, or close one (a compromised workload cannot widen
+  its own network surface).
 - **FR-21** — Strict L2 isolation between workloads (netns per VM, no bridge shared between
   tenants); verifiable by test (see SEC-30).
 - **FR-22** — Per-workload egress bandwidth cap (token bucket); the cap is enforced by the
   control plane, not by the guest.
-- **FR-23** — **User-defined address range**: a tenant may define the RFC1918 range from
-  which their workloads' /32s are assigned (bounded size, /24–/16); the platform validates
-  non-overlap against all other users' ranges **and platform-reserved ranges**
-  (fabric, storage net, link-local), transactionally, rejecting conflicts with
+- **FR-23** — **Address ranges, two kinds (E-22/E-23; re-scopes E-13)**: (a) **default —
+  a v6 ULA prefix /48–/56** (RFC 4193) from which the workload /128s are assigned —
+  user-defined or platform-allocated; (b) **legacy-v4 exception** — a user-defined
+  RFC1918 range (/24–/16) from which opt-in legacy workloads take an *additional* /32
+  (E-23). The platform validates non-overlap across all other users' ranges **and the
+  platform-reserved ranges of both families** (v6: fabric, storage, link-local,
+  metadata; v4: platform edge pools), transactionally, rejecting conflicts with
   machine-readable reasons; if unspecified, the platform allocates. Range choice affects
   **allocation policy only** — never reachability (FR-20/21 unchanged; doc 14 §3). [E-13]
 
@@ -205,7 +221,9 @@ tenant (platform enumeration, fingerprinting).
   via roles; every call logged. **No API surface spans both planes.**
 - **FR-41** — Per-workload metadata service (HTTP API inside the VM): exposes only the calling
   workload's own data, **upon presentation of a single-use token** (lesson R-F0.1 — never
-  IMDSv1-style).
+  IMDSv1-style). Reached at the **fixed well-known v6 address** (`fe80::a9fe:a9fe`)
+  routed to the per-host metadata-proxy (E-22/E-25) — the endpoint itself carries no
+  family choice the guest could influence.
 - **FR-42** — Metering: per workload and per tenant, across **storage tiers and classes**
   (local-NVMe GB·s, hot/cold GB·month, epoch-ship bytes, seals) plus vCPU/RAM/GPU-hours and
   **host-hours per allocation** (dedicated-host accounting unit), with per-host utilization
@@ -279,6 +297,12 @@ device model (E-4) uses **block devices only** — virtio-fs is not part of the 
 - **SEC-14** — Minimal host memory mapping for the VMM: no inter-workload shared memory;
   guest memory wiped (madvise MADV_DONTNEED / KVM_SET_USER_MEMORY_REGION unmap) at teardown.
   [FR-3]
+- **SEC-43** — **IPv6 dataplane hardening** (E-22/E-25; doc 14 §8): nftables in the
+  workload netns drops **unknown or unnecessary IPv6 extension headers** and all routing
+  headers, applies a strict fragment policy, **suppresses RA/ND emission from the
+  workload side** (the platform never SLAACs; the guest does not autoconfigure), and
+  enforces the assigned source addresses per family — the v6 analog of ARP-era
+  anti-spoofing (ND/NA spoofing, extension-header abuse).
 
 ### 4.3 Control plane & identity management
 

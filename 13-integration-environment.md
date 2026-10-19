@@ -1,12 +1,15 @@
 # 13 — Integration Environment (Outscale cloud)
 
-Working document — v2, 2026-10-18. Defines and records the **integration environment**:
+Working document — v3, 2026-10-18. Defines and records the **integration environment**:
 PORCHE's "proper infra" simulated on Outscale cloud VMs, used for test and integration
 **before and alongside** the bare-metal PoC. This document is the contract between that
 environment and the design corpus: what it validates, what it deliberately never
 validates, how it is built, and how it is operated.
 **v2 (E-16/E-18)**: the PoC itself executes here — metal keeps every performance and
 security gate; "functionally" for the escape suite made explicit (baseline-delta method).
+**v3 (E-22/E-25)**: IPv6-first — cross-host v6 validated here over a **v6-in-v4 tunnel**
+(transport substitution); native v6 fabric = metal-only. Outscale Nets recorded as
+IPv4-only.
 
 Related: doc 07 (the PoC — **executes here**, E-16; perf and security evidence stays on
 metal), doc 12 (software architecture validated here), doc 08 A-1/A-9 (the spikes hosted
@@ -40,6 +43,7 @@ here).
 | **A-9 spike**: CLH live migration between two nodes over TLS, KMS lease extension, cutover state machine, checkpoint fallback | FR-34, E-3, doc 12 §6 |
 | Epoch shipping, `SyncVolume` seals, restore from checkpoint, storage-worker clone | doc 04 |
 | Escape suite "must fail" runs (E-7) — functionally; kernel hardening applies inside the node. "Functionally" = the harness runs and the PoCs exercise the intended surface; **no security claim is inferred** — the baseline-delta evidence (E-18) is metal-only | SEC-40/SEC-11 |
+| Cross-host IPv6 workload routing — **over v6-in-v4 (SIT/GRE) as a transport substitution**; netns/bridge/nft/proxy mechanics are the real ones | doc 14 §3, E-22/E-25 |
 | Teardown + relaunch loops, wedge detection | doc 01 §8 criteria 6 |
 
 **Never validated here (metal only):**
@@ -52,6 +56,7 @@ here).
 | L2/VLAN control (F45 class), IOMMU/VFIO, GPU | no L2 access, no VT-d passthrough in cloud VMs |
 | Netboot/reimage (doc 10) | no PXE; approximated by image swap or rpm-ostree — drain/attest/wipe *logic* still exercised |
 | PERF-13 migration pause absolute value | measured, but as a smoke signal only |
+| Native IPv6 workload fabric | Outscale Nets are RFC1918 v4-only (§4 item 11); v6 exists here only over the tunnel substitution — native-v6-fabric behavior is metal-only |
 
 ## 3. Topology
 
@@ -102,6 +107,11 @@ Region `eu-west-2`; subregion `eu-west-2a`. Credentials: local `~/.osc/config.js
     a Python SDK shim (`bin/osc-api.py`) existed just for that, now deleted because octl's
     flags are typed. And **only the `sandbox` profile of `~/.osc/config.json` is ever used**
     (the file holds two profiles; the other is out of bounds for this project).
+11. **Nets are IPv4-only**: a Net's CIDR must be RFC1918 (/16–/28), public IPs are v4
+    (`CreatePublicIp`/`LinkPublicIp`), and there is no v6 Net option. Consequence
+    (E-22/E-25): cross-host workload v6 rides a **v6-in-v4 tunnel** here — a transport
+    substitution per §2's fidelity contract — and native v6 fabric is a metal-only claim.
+    Attached-IPv4 mechanics (E-24) map 1:1 onto Outscale public IPs and validate here.
 
 ## 5. Provisioning recipe (reproducible)
 
@@ -174,3 +184,5 @@ sysctls is the acceptable interim.
 - [ ] Net-tenancy question: verify whether a dedicated-group Net can host default-tenancy
       VMs (if yes, migrate topology off public mode for cleaner segmentation).
 - [ ] Decide the tc shaping profile simulating FR-30 storage-network reservations.
+- [ ] v6-in-v4 tunnel profile between nodes (SIT/GRE — E-22/E-25): mechanism choice,
+      addressing of the tunnel endpoints, and how it composes with the tc shaping above.

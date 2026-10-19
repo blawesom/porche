@@ -1,6 +1,6 @@
 # 12 — Software Architecture: Control Plane and Host-Side Software
 
-Working document — v2, 2026-10-18. The software-architecture spec A-7 deferred ("a
+Working document — v3, 2026-10-18. The software-architecture spec A-7 deferred ("a
 dedicated doc, post-PoC"); seeded by operator decisions **E-9/E-10** (doc 08 §E).
 It specifies: state authority, order flow, service decomposition, language/stack, and the
 state store. It does **not** re-open the plane model (E-8, doc 02 §3.1) or the data plane
@@ -9,6 +9,8 @@ state store. It does **not** re-open the plane model (E-8, doc 02 §3.1) or the 
 P0/P1, HSM/quorum = GA); `build-worker` named as the `ImportImage` rebuild path (E-17);
 console recording added to the host-agent role (E-19); static route rows confirmed as the
 v1 route-propagation decision (E-20).
+**v3 (E-22..E-24)**: route rows family-tagged (`ip6/128` default, optional legacy
+`ip4/32`); attached-IPv4 listener/attachment move with the workload at migration cutover.
 
 ---
 
@@ -115,15 +117,18 @@ gRPC over mTLS (tonic), **host dials out only** (I-11 — zero inbound ports on 
   console to a per-workload **local** log — lifetime-bounded (destroyed with the workload;
   ≤ TTL + 24 h for stateful); the tenant reads it over the tenant channel for their own
   workloads. No central console store exists in v1.
-- **Route rows** (E-20): cross-host workload /32 routes are desired-state rows compiled
-  into each host's root ns (doc 14 §3) — static, no BGP or dynamic routing protocol in
-  v1; the route table stays the seam where BGP enters later.
+- **Route rows** (E-20/E-22): cross-host workload routes are desired-state rows compiled
+  into each host's root ns — `ip6/128 → host-fabric-ip6` by default (plus an optional
+  `ip4/32` row for legacy-v4 workloads, E-23) — static, no BGP or dynamic routing
+  protocol in v1; the route table stays the seam where BGP enters later.
 - **Migration workflow** (FR-34, E-3) runs as a state machine in the tenant-plane service:
   `requested → preparing (target: volume lease + KMS scoped unwrap) → transferring (CLH
   live migration) → cutover → done`, with **checkpoint migration as the failure fallback**
   at every state. DEK availability on two hosts during the window = time-bounded,
   volume-scoped **lease extension in the KMS** (SEC-24: unwrap requires host identity —
-  both hosts hold identities; the lease bounds *what* and *how long*).
+  both hosts hold identities; the lease bounds *what* and *how long*). At cutover, an
+  **attached IPv4** moves with the workload: the listener and the attachment switch in
+  the same transaction as the route rows (E-24, doc 14 §5).
 
 ## 7. Explicitly excluded from v1
 

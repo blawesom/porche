@@ -1,6 +1,6 @@
 # 02 — Core Architecture Design (new orchestrator, incumbent design as reference)
 
-Working document — v7, 2026-10-18. Implements `01-requirements.md`.
+Working document — v8, 2026-10-18. Implements `01-requirements.md`.
 **v4** (doc 08 E-1..E-3): stateful workloads and ingress first-class v1; live migration
 is a v1 goal. **v5** (doc 08 E-4): **Cloud Hypervisor directly orchestrated — single
 runtime; Kata and containerd dropped** (§4, doc 08 A-9).
@@ -9,6 +9,9 @@ plane / workload data plane (§3.1).
 **v7** (doc 08 E-12/E-14/E-16..E-21): CNI references removed (native netns per doc 14);
 phase vocabulary = P-codes only; §7 gains the P1 critical-path note; PoC position per
 E-16 (metal keeps every perf/security gate).
+**v8** (doc 08 E-22..E-25): **IPv6-first workload network** — routed /128, family
+translation only at the proxies; legacy-v4 is a bounded exception; attached IPv4 is 1:1
+at the edge.
 Simplification rationale: `03-simplification.md` (C-1..C-6, superseded in part by E-4 —
 see doc 03 §6).
 Storage durability tiers (local NVMe write-back + epoch sync, checkpoint semantics): `04-storage-tiers.md`.
@@ -400,7 +403,7 @@ alongside the networking data path. The PoC itself runs in the integration envir
 | Phase | Scope | Exit criteria |
 |---|---|---|
 | P0 | 1 host, control plane v0 (new build), host-agent + CLH (direct, E-4), one encrypted volume round-trip (create→attach→write→detach) | doc 01 acceptance criteria 1–7 |
-| P1 | Full create-instance flow on the new path; storage worker (clone) under encryption; KMS in HA; **workload networking** (doc 14 — netns/isolated bridge, routed /32, egress/ingress proxies, IngressRule/EgressRule/SecurityGroup — E-12/E-14); ingress data path (per-host proxy, E-2); **live-migration two-host spike on the direct-CLH stack (A-9, E-4)** | PERF-1/5/8/9 met; F42-fix PoC (no guest-controlled channel exists to attack); F0.1-fix PoC (metadata without token fails); PERF-13 evidenced on the spike — else **E-15 fallback**: live migration moves to P2, checkpoint migration stands |
+| P1 | Full create-instance flow on the new path; storage worker (clone) under encryption; KMS in HA; **workload networking** (doc 14 — netns/isolated bridge, routed **/128, IPv6-first (E-22)**, egress/ingress proxies, IngressRule/EgressRule/SecurityGroup — E-12/E-14); ingress data path (per-host proxy, E-2); **live-migration two-host spike on the direct-CLH stack (A-9, E-4)** | PERF-1/5/8/9 met; F42-fix PoC (no guest-controlled channel exists to attack); F0.1-fix PoC (metadata without token fails); PERF-13 evidenced on the spike — else **E-15 fallback**: live migration moves to P2, checkpoint migration stands |
 | P2 | GPU (VFIO/MIG via CLH hotplug), runtime volume attach/detach (hotplug), live migration GA (PERF-13), CMK option for tenants | GPU PoC on A100; PERF-13 met; CMK wrap hierarchy reviewed |
 | P3 | HA hardening, fleet version-registry enforcement, CI attack suite at full coverage | I-5 gate enforced (deploys blocked on EOL/CVE) |
 
