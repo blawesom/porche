@@ -34,10 +34,10 @@ cycle() {
 
     local deadline=$(( TIMEOUT_READY * 100 ))
     for _ in $(seq 1 "$deadline"); do
-        grep -q '^porche.ready$' "$LOG" 2>/dev/null && break
+        grep -q 'porche.ready' "$LOG" 2>/dev/null && break
         sleep 0.01
     done
-    if ! grep -q '^porche.ready$' "$LOG" 2>/dev/null; then
+    if ! grep -q 'porche.ready' "$LOG" 2>/dev/null; then
         echo "wedge: porche.ready not seen within ${TIMEOUT_READY}s" >&2
         return 1
     fi

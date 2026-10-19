@@ -1,0 +1,12 @@
+{
+  "id": "loop1",
+  "image_digest": "sha256:9987be0107f94ec469bfefeabb026ba836eaefd5d0968743a92d656b83eba851",
+  "command": "echo paOpFlpcgiFuzdqXMQpEqFxiJFz2kLkvGymDJ+M9UPk= | base64 -d | dd of=/dev/vda bs=64k conv=notrunc",
+  "vcpu": 1,
+  "ram_mib": 128,
+  "volume": {
+    "size_mib": 256
+  },
+  "ip6": "fd42:1:1::1",
+  "gw6": "fd42:1:1::ff"
+}

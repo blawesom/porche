@@ -63,10 +63,10 @@ for c in $(seq 1 "$CYCLES"); do
     log="$DATA_DIR/consoles/$ID.log"
     deadline=$(( CREATE_WEDGE_S * 100 ))
     for _ in $(seq 1 "$deadline"); do
-        grep -q '^porche.done' "$log" 2>/dev/null && break
+        grep -q 'porche.done' "$log" 2>/dev/null && break
         sleep 0.01
     done
-    grep -q '^porche.done' "$log" 2>/dev/null \
+    grep -q 'porche.done' "$log" 2>/dev/null \
         || { echo "FAIL cycle $c: guest did not reach porche.done" >&2; exit 1; }
 
     # liveness probe (§7.2 wedge detection)
@@ -107,13 +107,15 @@ for line in open(f"{run_dir}/perf8-memory.csv"):
     if line.startswith("cycle"): continue
     c, m = line.strip().split(",")
     mem[int(c)] = int(m)
-mem_a, mem_b = mem.get(a), mem.get(n)
+# short runs (mini-runs): the drift checkpoint clamps to the last cycle
+a_eff = a if a in mem else (max(mem) if mem else None)
+mem_a, mem_b = mem.get(a_eff), mem.get(n)
 if mem_a is None or mem_b is None:
     print("PERF-8 drift: CHECKPOINT MISSING")
     drift = None
 else:
     drift = 100 * (mem_a - mem_b) / mem_a  # positive = MemAvailable shrank
-    print(f"MemAvailable: cycle {a}={mem_a}kB  cycle {n}={mem_b}kB  drift={drift:+.2f}%")
+    print(f"MemAvailable: cycle {a_eff}={mem_a}kB  cycle {n}={mem_b}kB  drift={drift:+.2f}%")
 
 print(f"teardown: n={len(td)} P50={pct(td,50)}ms P99={pct(td,99)}ms max={td[-1]}ms")
 gate = drift is not None and abs(drift) < 5

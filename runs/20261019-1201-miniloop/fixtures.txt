@@ -1,0 +1,27 @@
+# fixtures (doc 07 §7.1) — 2026-10-19T11:59:45Z
+
+## Node OS + kernel
+5.14.0-427.37.1.el9_4.x86_64
+PRETTY_NAME="Rocky Linux 9.4 (Blue Onyx)"
+
+## CLH
+cloud-hypervisor v54.0
+
+## Guest image (action 11 artifacts)
+kernel 6.18.57 sha256:fdb3b9c8f993b0f7436279dbbf558e5165970ed87328e5f51334f2b2142349c7
+initramfs busybox-1.36.1 sha256:2fb417091d81136ce364932903d319856343539228a8d591c106ad0aab5625f3
+platform_init sha256:730a7922f9857df0d9b0285faad81db97eb6ab451a57cfde25ad70c6d35007be
+
+## host-agent
+commit: unknown
+binary: /usr/local/bin/porche
+
+## Hardening state (SEC-11 assert)
+ok   kernel.io_uring_disabled=2
+ok   user.max_user_namespaces=0
+ok   kernel.modules_disabled=1
+ok   kernel.core_pattern=core
+
+## Offload / device allow-list state
+offloads_off: true (VmConfig default — SEC-7; delta run flips it)
+device surface: frozen (porche-clh VmConfig — SEC-3)

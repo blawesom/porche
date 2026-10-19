@@ -116,6 +116,25 @@ Region `eu-west-2`; subregion `eu-west-2a`. Credentials: local `~/.osc/config.js
     (E-22/E-25): cross-host workload v6 rides a **v6-in-v4 tunnel** here — a transport
     substitution per §2's fidelity contract — and native v6 fabric is a metal-only claim.
     Attached-IPv4 mechanics (E-24) map 1:1 onto Outscale public IPs and validate here.
+12. **Keypair injection can serve a stale key** (2026-10-19): `c8r16p1` VMs created
+    with `KeypairName=porche-integ2` (metadata confirmed it) had the **old
+    `porche-integ` key** injected in `authorized_keys` — while a `c2r2p1` VM created
+    with the identical flag got the right key (host-level cache reuse suspected).
+    **Workaround (now the rule)**: pass the key via `--UserData` cloud-config
+    (`ssh_authorized_keys:`), which bypasses keypair injection entirely, and **verify
+    the authorized key in the console output** (`ReadConsoleOutput` → cloud-init's
+    authorized-keys table) before trusting SSH.
+13. **`StartVms` on a stopped group VM can 504-loop** (2026-10-19): four attempts,
+    all gateway timeouts, VM never reallocated (a `c2r2p1` creation in the same
+    group booted in 20 s — capacity was fine). VMs **boot reliably at creation**;
+    a **guest reboot** (`systemctl reboot`) retains the physical server. Rule: never
+    stop the node mid-burst; teardown = stop (accepting recreation cost) — the node
+    is reproducible in ~5 min (`harness/node-setup.sh` + bundle).
+14. **TF applies touching VM-linked resources were unreliable during the 2026-10-19
+    burst** (one stopped the node despite `env_running=true`; link applies hung).
+    The working links were made directly via `octl` (`LinkVolume`, `LinkPublicIp`).
+    TF state holds the current records; reconcile with the documented
+    out-of-band-then-import pattern before the next TF use.
 
 ## 5. Provisioning recipe (reproducible)
 
@@ -143,34 +162,29 @@ control plane:
              → Postgres (databases tenant/admin/kms), porche services, HTTP image svc
 ```
 
-## 6. Current state (2026-10-18)
+## 6. Current state (2026-10-19, post-burst)
 
-| Resource | ID | Status (verified via octl, 2026-10-18 evening) |
+| Resource | ID | Status |
 |---|---|---|
 | Dedicated group `Test1` | `ded-53c8318b` (eu-west-2a, gen 7) | pre-existing, in use |
-| Metal node 1 (validation) | `i-7482ee3c` (`tinav7.c8r16p1`, nested virt) | **stopped** (2026-10-19 cost pause) — CLH v54.0 booted guests; environment preserved on the root BSU; resumes with `StartVms` |
-| Node 1 public IP | `eipalloc-84925ae5` (`148.253.126.10`) | allocated, **unlinked** (kept — operator decision, 2026-10-19) |
-| Node 1 second BSU | `vol-414ae55c` (200 GB) | **deleted** (2026-10-19 clearing — never used; re-created by `tofu apply`) |
-| SG `porche-integ-sg` | `sg-ba94b9e2` | deployed |
-| Keypair `porche-integ` | local `id_ed25519_research` | deployed |
-| SGs `hostcp` / `hostshard` | `sg-6145a812` / `sg-63985462` | deployed (gRPC, NFS, migration-TLS rules) |
+| Metal node 1 | `i-b48c9483` (`tinav7.c8r16p1`, nested virt, keypair `porche-integ2`, key injected via UserData — §4.12) | **PoC-ready**, stopped at burst end (§4.13: recreation = `harness/node-setup.sh` + bundle, ~5 min) |
+| Node 1 public IP | `eipalloc-84925ae5` (`148.253.126.10`) | linked to `i-b48c9483` (via octl) |
+| Node 1 second BSU | `vol-ad0f8082` (200 GB gp2) | linked (via octl); ext4 `porche-nvme` label, mounted `/var/lib/porche` with discard — the tier-E volume region |
+| SG `porche-integ-sg` | `sg-ba94b9e2` | SSH rule **extended**: `171.33.93.229/32` (current office egress, 2026-10-19) |
+| Keypair | `porche-integ2` (local `~/.ssh/porche_integ`) | active; the old `porche-integ` key is **lost** (private key not found — root cause of the 2026-10-19 node recreation) |
+| SGs `hostcp` / `hostshard` | `sg-6145a812` / `sg-63985462` | deployed |
 | Public IPs (node 2 / NFS / CP) | `eipalloc-7df5877e` / `eipalloc-64230109` / `eipalloc-37f28ba3` | allocated, unlinked |
-| Metal node 2 | `i-2727754e` | **terminated 2026-10-18**; TF-state drift **reconciled 2026-10-19** — recreate per §5 at the 2-host stage |
-| Node 2 second BSU | `vol-c14305ae` (200 GB) | **deleted** (2026-10-19 clearing) |
-| NFS VM, control-plane VM | — | **not yet provisioned** (recipe §5) |
+| Metal node 2 | — | not recreated (2-host stage) |
+| NFS VM, control-plane VM | — | not provisioned (recipe §5) |
+| Canary VM | `i-b57d5cda` (`tinav7.c2r2p1`) | **deleted** 2026-10-19 (allocation probe — §4.13) |
 
-Note: node 1 currently runs stock Rocky 9 — it was the nested-virt validation vehicle.
-**Sequencing (doc 07 §7.1)**: the harness develops on Rocky (the acceptable interim);
-the **recorded PoC run** moves to the **FCOS stable OMI** (§8 open item), and to the
-**lean derivative** (action 13) for P0.
-
-**Cleared for cost, 2026-10-19 (operator)**: node 1 is **stopped** (physical server
-released; the environment — Rocky 9, nested-virt config, CLH v54 — is preserved on its
-root BSU and resumes on `StartVms`), both empty 200 GB BSUs are **deleted** (never used;
-`tofu apply` re-creates them as `+` lines), and the public IPs stay **allocated but
-unlinked** (operator decision). The only billed PORCHE resource left is node 1's root
-BSU. `make down`/`make up` are safe again: the node-2 drift is reconciled out of the
-TF state.
+Node 1 PoC state (all applied by `harness/node-setup.sh`): CLH v54.0
+(sha256-pinned), SEC-11 sysctls asserted, modules `bridge/veth/nf_tables/dm_mod/
+dm_crypt/loop/tun` warmed and verified before `modules_disabled=1`, `brporche`
+bridge, platform image + specs under `/root/poc/`, host-agent at
+`/usr/local/bin/porche`. **First full PoC cycle green on this node** (doc 07
+§8.5): create → `porche.ready` → `porche.done` → poweroff → wipe all-pass;
+5-cycle loop stable (`runs/20261019-1201-miniloop/`).
 
 ## 7. Operations
 

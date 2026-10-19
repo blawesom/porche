@@ -263,9 +263,11 @@ node happens locally.
 | Workstream | State |
 |---|---|
 | repo restructure (E-27) | done 2026-10-19 |
-| WS-A | **not started — needs operator `make up` (billing)** |
-| WS-B | scaffolded (`guest/` build scripts; kernel pin recorded at first fetch) |
-| WS-C | scaffolded (`src/` workspace: types, store, verb orchestration, CLH client skeleton; unit tests offline; on-node integration pending WS-A) |
-| WS-D | scaffolded (`harness/` scripts) |
-| WS-E | not started (after WS-C) |
-| WS-F | not started (after WS-A..WS-E) |
+| WS-A | **done 2026-10-19** — node 1 PoC-ready (interim Rocky 9.4; recorded run still FCOS per §7.1): CLH v54.0 digest-pinned, all four SEC-11 sysctls asserted, modules warmed **and verified** before `modules_disabled` seals, `/var/lib/porche` on the 200 GB BSU region (ext4, discard) |
+| WS-B | **done 2026-10-19** — kernel 6.18.57 **bzImage** (vmlinux lacks the PVH header CLH wants; bzImage boots via the Linux boot protocol) + BusyBox rootfs + platform init, digest-pinned, installed on node |
+| WS-C | **first full cycle green 2026-10-19** — create → `porche.ready` → `porche.done rc=0` → poweroff; wipe report all-pass (319 ms); CLH v54 API contract pinned on the node (payload strings, net sequence, serial `{mode,file}`, memory bytes, disk `image_type: Raw`, Content-Length HTTP reads, real TUN/TAP in-netns bridge + netdev anti-spoof). Residual: create ≈ 8–9 s (Argon2id luksFormat dominates — PERF-1 must account for KDF cost) |
+| WS-D | **exercised 2026-10-19** — 5-cycle stability loop on node: no wedge, no residue, teardown P50 1.33 s / P99 1.33 s (§7.5-mini PASS); boot-time + density scripts ready, not yet run at §7.2 scale |
+| WS-E | not started (after WS-C/D at scale) |
+| WS-F | not started (FCOS OMI → recorded run) |
+
+First-run artifacts: `runs/20261019-1201-miniloop/` (fixtures + results).

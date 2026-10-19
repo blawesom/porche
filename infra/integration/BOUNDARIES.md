@@ -17,38 +17,26 @@ destroy path).
 
 | Resource | ID | Notes |
 |---|---|---|
-| Metal node 1 | `i-7482ee3c` | `tinav7.c8r16p1`, nested virt verified, CLH v54 boots guests; Rocky 9 placeholder; running (ephemeral public IP `171.33.73.205` while its EIP is unlinked) |
-| Node 1 public IP | `eipalloc-84925ae5` (`148.253.126.10`) | allocated; currently **unlinked** (public IPs disassociate when a VM stops) |
-| Management SG | `sg-ba94b9e2` (`porche-integ-sg`) | SSH/ICMP from office; worn by both metal nodes |
-| Keypair | `porche-integ` | local private key `id_ed25519_research` |
+| Metal node 1 | `i-b48c9483` | `tinav7.c8r16p1`, nested virt, keypair `porche-integ2` **injected via UserData** (§4.12 — keypair injection served a stale key on this VM type); PoC-ready (doc 07 §8.5); **stopped at burst end 2026-10-19** — recreation path is scripted (§4.13) |
+| Node 1 public IP | `eipalloc-84925ae5` (`148.253.126.10`) | linked to `i-b48c9483` (via octl) |
+| Management SG | `sg-ba94b9e2` (`porche-integ-sg`) | SSH/ICMP from office; **rule added 2026-10-19: `171.33.93.229/32` tcp/22** (current office egress — was `171.33.98.94`); worn by both metal nodes |
+| Keypair | `porche-integ2` (local `~/.ssh/porche_integ`) | active 2026-10-19; the OLD `porche-integ` keypair remains in the account but its private key (`id_ed25519_research`) is **lost** — do not rely on it |
 | Dedicated group | `Test1` (`ded-53c8318b`, eu-west-2a, gen 7) | **shared — marked "in use" in doc 13 §6; never deleted** |
-| Node 1 root BSU | `vol-679e783c` (50 GB gp2) | created with the VM |
+| Node 1 root BSU | created with the VM | DeleteOnVmDeletion=true |
 
 ## PORCHE-owned, MANAGED by `infra/integration/`
 
 Everything named `porche-integ-*` that this configuration creates:
-metal node 2 + its 200 GB BSU, node 1's 200 GB BSU (volume + link only —
-the VM itself is untouched), the NFS VM, the control-plane VM, the
-`hostcp`/`hostshard` SGs, and the public IPs of the new VMs.
+the `hostcp`/`hostshard` SGs, node 2 + its BSU, the NFS VM, the
+control-plane VM, and the public IPs of the new VMs.
 
-Verified state after the 2026-10-18 partial apply: metal node 2
-(`i-2727754e`) was created out-of-band and **terminated the same day**
-(it no longer exists; the local TF state still recorded it — see the
-2026-10-19 clearing below). What survived in the account: both 200 GB BSUs
-(`vol-414ae55c` node 1, `vol-c14305ae` node 2 — both unlinked), the
-`hostcp`/`hostshard` SGs with their rules, and three unlinked public
-IPs (`eipalloc-7df5877e` node 2, `eipalloc-64230109` NFS,
-`eipalloc-37f28ba3` control plane).
-
-**Cleared 2026-10-19 (cost pause, operator)**: metal node 1 **stopped**
-(physical server released; root BSU, Rocky 9, nested-virt config and the
-CLH v54 install kept for instant resume), both 200 GB BSUs **deleted**
-(provisioned, never used), the four public IPs **kept allocated**
-(operator decision — all unlinked), and the TF state **reconciled**: the
-dead `metal_node2` VM record, both `*_nvme` volume + volume-link records
-removed (serial 8, backup in `state-backups/`); the next `tofu plan`
-shows `+` create lines only, per the hard rule. Remaining billed: node
-1's 50 GB root BSU.
+**2026-10-19 burst state**: node 1's 200 GB BSU is
+`vol-ad0f8082` (created via TF, **linked via octl** — §4.14); the TF state
+currently holds volume + EIP + SGs, with the VM and link records removed
+(stale IDs after the node recreation) — reconcile with the
+out-of-band-then-import pattern before the next TF use. A canary VM
+(`i-b57d5cda`, `tinav7.c2r2p1`) used to prove group allocation was
+**deleted** after the burst.
 
 ## NOT PORCHE — untouchable, present in the account
 
