@@ -1,6 +1,6 @@
 # 12 — Software Architecture: Control Plane and Host-Side Software
 
-Working document — v3, 2026-10-18. The software-architecture spec A-7 deferred ("a
+Working document — v4, 2026-10-18. The software-architecture spec A-7 deferred ("a
 dedicated doc, post-PoC"); seeded by operator decisions **E-9/E-10** (doc 08 §E).
 It specifies: state authority, order flow, service decomposition, language/stack, and the
 state store. It does **not** re-open the plane model (E-8, doc 02 §3.1) or the data plane
@@ -11,6 +11,8 @@ console recording added to the host-agent role (E-19); static route rows confirm
 v1 route-propagation decision (E-20).
 **v3 (E-22..E-24)**: route rows family-tagged (`ip6/128` default, optional legacy
 `ip4/32`); attached-IPv4 listener/attachment move with the workload at migration cutover.
+**v4 (E-26)**: desired-state wording — host bindings (not "allocations"); tenant-plane
+metering events served to tenants as `GetUsage`.
 
 ---
 
@@ -20,7 +22,7 @@ v1 route-propagation decision (E-20).
 
 | Concern | Owner | Mechanism |
 |---|---|---|
-| Desired state (workloads, volumes, network rules, allocations) | control plane | objects + pending calls in the state store, transactional |
+| Desired state (workloads, volumes, network rules, host bindings) | control plane | objects + pending calls in the state store, transactional |
 | Reported state (running, stopped, failed, migrated) | host | reports over the host channel; never trusted where security matters (report/attest split, doc 08 A-3) |
 | TTL + quota enforcement under partition | host | enforced locally — fail-safe: the host knows the TTL; no control-plane lease is required to keep running |
 | Convergence | host | reconciliation to desired state (I-12) |
@@ -57,7 +59,7 @@ Three services total; one per plane plus the shared trust anchor:
 
 | Service | Plane | Contents |
 |---|---|---|
-| **tenant-plane** | tenant | API front (REST + gRPC mirror), **scheduler as in-process component** (shares the placement transaction), per-host desired-state computation, migration workflow state machine, quota enforcement, metering events |
+| **tenant-plane** | tenant | API front (REST + gRPC mirror), **scheduler as in-process component** (shares the placement transaction), per-host desired-state computation, migration workflow state machine, quota enforcement, metering events (served to tenants as `GetUsage`, E-26) |
 | **admin-plane** | admin | fleet registry + lifecycle, version registry + deploy gates, image pipeline triggers (`ImportImage` → controlled rebuild, `build-worker` — E-17), monitoring ingestion, user administration |
 | **KMS** | shared trust anchor (owned by neither plane, E-8) | DEK wrap/unwrap, token minting, host enrollment (attestation-gated) |
 

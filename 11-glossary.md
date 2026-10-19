@@ -8,6 +8,7 @@ as a v1 goal (E-3, doc 08). **v3 (E-8)**: control plane split into planes.
 **v4 (E-16/E-17)**: *metal validation run* and *smoke signal* added; *intake sandbox*
 marked deferred (dangling doc-02 §3.2 pointer fixed); P-codes added.
 **v5 (E-22..E-24)**: *IPv6-first*, *legacy-v4 workload*, *attached IPv4*, *ULA* added.
+**v6 (E-26)**: *allocation* retargeted — the binding is Host state, not an API object.
 
 ---
 
@@ -54,7 +55,7 @@ In doc 01 (and wherever requirements are restated):
 | **legacy-v4 workload** | A workload that additionally holds one v4 /32 from the user's RFC1918 range (E-23) — opt-in, documented debt, quota-bound. Every workload still has a v6 /128; v4 is additive. | the default workload model |
 | **attached IPv4** | A platform-pool public v4 bound 1:1 to one workload, both directions, enforced at the per-host proxies (E-24). | any v4 address inside the deployment |
 | **ULA** | Unique local address (RFC 4193, `fd00::/8`) — the VPC v6 prefix family. | GUA (not delegated in v1) |
-| **allocation** | The binding of one host to one user (SEC-16; doc 05). | — |
+| **allocation** | The act/state of binding one host to one user (SEC-16; doc 05) — **Host state, not an API object** (E-26: allocate = create, release = delete). | — |
 | **tier** | Volume durability: E / R / S (doc 04). Nothing else is a tier. | performance level, storage location |
 | **class** | Storage location/cost of a remote copy: hot / cold (doc 04 §2.2). | durability (say *tier*) |
 | **seal** (noun) | Not used as a noun — the object is a *checkpoint*. | — |

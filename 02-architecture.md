@@ -1,6 +1,6 @@
 # 02 — Core Architecture Design (new orchestrator, incumbent design as reference)
 
-Working document — v8, 2026-10-18. Implements `01-requirements.md`.
+Working document — v9, 2026-10-18. Implements `01-requirements.md`.
 **v4** (doc 08 E-1..E-3): stateful workloads and ingress first-class v1; live migration
 is a v1 goal. **v5** (doc 08 E-4): **Cloud Hypervisor directly orchestrated — single
 runtime; Kata and containerd dropped** (§4, doc 08 A-9).
@@ -12,6 +12,8 @@ E-16 (metal keeps every perf/security gate).
 **v8** (doc 08 E-22..E-25): **IPv6-first workload network** — routed /128, family
 translation only at the proxies; legacy-v4 is a bounded exception; attached IPv4 is 1:1
 at the edge.
+**v9** (doc 08 E-26): host registry — the allocation is Host state (doc 09 v7:
+`AllocateHost`/`ReleaseHost` on the Host object).
 Simplification rationale: `03-simplification.md` (C-1..C-6, superseded in part by E-4 —
 see doc 03 §6).
 Storage durability tiers (local NVMe write-back + epoch sync, checkpoint semantics): `04-storage-tiers.md`.
@@ -103,7 +105,7 @@ Each improvement is traceable to a requirement (doc 01) and a root cause (assess
   │                                        │                                    │
   │        + KMS service (volume DEK wrap/unwrap, workload tokens) — shared          │
   │          trust anchor, owned by neither plane (E-8)                          │
-  │        + HostAllocation registry, placement views, affinity engine         │
+  │        + host registry (bindings — E-26), placement views, affinity engine         │
   │          (scheduler candidates ⊆ owner's hosts; attract/repulse tags)      │
   └────────────────────────────────────────┼──────────────────────────────────┘
                                            │ outbound mTLS, desired-state pull (I-11/I-12;

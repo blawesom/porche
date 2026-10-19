@@ -1,7 +1,9 @@
 # 05 — Dedicated Hosts, User Placement Views, Attract/Repulse Resiliency
 
-Working document — v3, 2026-10-18. **v2**: §7.1 adds live migration as a v1 goal (E-3,
-doc 08 A-9). **v3 (vocabulary sweep, E-16..E-21 pass)**: GPU phase prose → P2. Adds the
+Working document — v4, 2026-10-18. **v2**: §7.1 adds live migration as a v1 goal (E-3,
+doc 08 A-9). **v3 (vocabulary sweep, E-16..E-21 pass)**: GPU phase prose → P2.
+**v4 (E-26)**: `HostAllocation` merged into **Host** — the binding is Host state
+(allocate = create, release = delete; doc 09 v7). Adds the
 hosting model to `02-architecture.md`:
 
 1. **A bare metal host is allocated to exactly one user** (dedicated hosts).
@@ -17,8 +19,9 @@ hosting model to `02-architecture.md`:
 ### 1.1 Dedicated allocation
 
 - A **host is allocated to at most one user at a time** — a hard scheduling boundary, not a
-  preference. `HostAllocation` (user, host, state) is a control-plane object with lifecycle:
-  `free → allocated(user) → draining → free`.
+  preference. The binding is **Host state** — allocate = create, release = delete, no
+  separate API object (E-26, doc 09); lifecycle: `free → allocated(user) → draining →
+  free`.
 - The scheduler's candidate set for a workload is **always** ⊆ the owner's allocated hosts.
   Cross-user co-location is structurally impossible — no policy can violate it.
 - Allocation granularity: single hosts, optionally constrained to host groups (see §1.2).

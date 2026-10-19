@@ -34,7 +34,7 @@ the design.
 | 06 | [design basis](06-design-basis.md) | Self-contained research record: isolation landscape, CVE history, assessment findings (F-register), incumbent design, stack decision |
 | 07 | [PoC scope](07-poc.md) | First proof of concept: minimal scope, explicit deferrals, kill criteria |
 | 08 | [challenges](08-challenges.md) | Design review: challenged decisions, contradictions, objective gaps, action list + scope-change register (E) |
-| 09 | [API](09-api.md) | Object catalog: CRUD + main attributes (User, Host, Allocation, Workload, Volume, Checkpoint, …) |
+| 09 | [API](09-api.md) | Object catalog + frozen tenant surface map: Host (allocate/release), Workload, Volume, Checkpoint, network rules, PublicIpv4, Image, … |
 | 10 | [upgrade & migration](10-upgrade-migration.md) | Operator runbook: host image/A-B reimage, canary rings, workload migration mechanics, failure handling |
 | 11 | [glossary](11-glossary.md) | Controlled-language contract: one word one meaning, RFC 2119 keywords, procedure writing rules |
 | 12 | [software architecture](12-software-architecture.md) | Control-plane and host-side software: state authority, order flow (no bus in v1), three services, Rust/tonic/sqlx, Postgres HA |

@@ -1,6 +1,6 @@
 # 01 — Requirements Specification
 
-Working document — v8, 2026-10-18. First normative document of the PORCHE project.
+Working document — v9, 2026-10-18. First normative document of the PORCHE project.
 **v2** (doc 08 E-1..E-3): stateful enterprise workloads and ingress access
 are first-class v1 citizens; live migration is a v1 goal.
 **v3** (doc 08 E-4): **Cloud Hypervisor, directly orchestrated, is the single runtime** —
@@ -21,6 +21,9 @@ vocabulary switched to P-codes.
 ULA /48 per VPC; v4 exists only at the edge (attached 1:1 public IPv4, E-24) or as the
 bounded legacy-v4 exception (E-23); FR-20/FR-23/FR-41 restated family-neutral; SEC-43
 added.
+**v9** (doc 08 E-26): v1 tenant surface re-baselined — the API freeze binds against
+doc 09's method map; Host/Allocation merged (the binding is Host state); FR-6 names
+`GetConsole`, FR-40 names `GetUsage` (showback).
 
 **Conventions (RFC 2119, doc 11 §1)**: every FR/SEC/PERF/OPS statement is **MUST** —
 normative, violation is a defect — unless explicitly marked **SHOULD** (deviation requires
@@ -123,8 +126,8 @@ tenant (platform enumeration, fingerprinting).
   (not just relayed) for execution audit. Mechanism (E-4): the workload's stdio is its
   serial console (virtio-console), recorded host-side to a **per-workload local log** —
   host-local and lifetime-bounded (E-19): destroyed with the workload (FR-3) for
-  ephemeral classes, retained ≤ workload TTL + 24 h for stateful; readable by the tenant
-  via the tenant API for their **own** workloads. **No central console-log store in v1.**
+  ephemeral classes, retained ≤ workload TTL + 24 h for stateful; readable via
+  **`GetConsole`** for their **own** workloads. **No central console-log store in v1.**
   **Exec into a running workload is not a v1 feature** (no guest agent exists — E-4; a
   minimal audited guest agent is a P2 addition if a use case demands it).
 
@@ -216,7 +219,8 @@ tenant (platform enumeration, fingerprinting).
 ### 3.5 Control plane & operations
 
 - **FR-40** — **Two API surfaces with separate authN domains (E-8)**: the **tenant API**
-  (workloads, volumes, ingress/egress rules, security groups, quotas, placement views, metrics) and the **admin API**
+  (workloads, volumes, ingress/egress rules, security groups, quotas, placement views,
+  metrics/usage — **`GetUsage`**, showback per FR-42) and the **admin API**
   (fleet, version registry, users) — REST/gRPC. AuthN via limited-lifetime tokens; AuthZ
   via roles; every call logged. **No API surface spans both planes.**
 - **FR-41** — Per-workload metadata service (HTTP API inside the VM): exposes only the calling
