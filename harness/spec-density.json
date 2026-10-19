@@ -1,0 +1,10 @@
+{
+  "id": "d0",
+  "image_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "command": "echo alive > /dev/console",
+  "vcpu": 1,
+  "ram_mib": 128,
+  "volume": { "size_mib": 128 },
+  "ip6": "fd42:1:1::1",
+  "gw6": "fd42:1:1::ff"
+}
