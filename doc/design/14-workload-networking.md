@@ -1,6 +1,6 @@
 # 14 — Workload Networking: Data Path, Management, Isolation
 
-Working document — v3, 2026-10-18. Specifies the workload network: the per-host data
+Working document — v4, 2026-10-19. Specifies the workload network: the per-host data
 path, addressing and routing, egress and ingress (IngressRule/EgressRule), enforcement and isolation
 rules, and the management flow. It resolves the last open data-path questions: C-6's CNI
 adoption (superseded — native netns), the F45 VLAN-trust question (doc 02 §8), and the
@@ -14,6 +14,9 @@ translation only at the proxies, bounded legacy-v4 exception (E-23), attached IP
 the edge (E-24), cmdline+init bootstrap and well-known v6 metadata address (E-25).
 Adversary model (doc 01 §0): the compromised workload itself — it attacks the host, its
 neighbors, and tries to bypass the control plane.
+
+**v4** (figures pass): Mermaid figures added (Fig. 14.1–14.3) — informative, the prose
+stays normative.
 
 ---
 
@@ -55,6 +58,45 @@ neighbors, and tries to bypass the control plane.
    ├─ egress-proxy  (host-agent module: allow-list per workload, NAT)
    ├─ ingress-proxy (host-agent module: IngressRule listeners — §5)
    └─ fabric interfaces: control (mTLS out, I-11), workload fabric, storage net (FR-30)
+```
+
+**Fig. 14.1 — Per-host data path (§2, same composition as the listing above).** L2 exists
+exactly inside one host; every byte crosses an enforcement point the platform owns (§1).
+
+```mermaid
+flowchart TB
+  subgraph rootns["root namespace (host)"]
+    BR["brporche — Linux bridge (per host = per user, SEC-16)<br/>workload ports: isolated on, hairpin off — no workload↔workload L2<br/>uplink port: fabric veth (workload fabric subnet)"]
+    EP["egress-proxy — host-agent module: allow-list per workload, NAT, DNS (§4)"]
+    IP["ingress-proxy — host-agent module: IngressRule listeners (I-14, §5)"]
+    MP["metadata-proxy — token-gated (C-3, I-4)"]
+    FAB["fabric interfaces: control (mTLS out, I-11) · workload fabric · storage net (FR-30)"]
+  end
+  subgraph netns["per-workload netns w-… (FR-21) — CLH runs jailed inside it (SEC-12/13)"]
+    TAP["tap — never leaves the netns"]
+    NFT["nftables: anti-spoof + security-group rules + egress redirect (SEC-43)"]
+    TC["tc token bucket, both directions (FR-22)"]
+    VETH["veth pair ↔ brporche (root side enslaved)"]
+    RT["route fe80::a9fe:a9fe/128 → metadata-proxy (E-25)"]
+  end
+  VM["microVM — workload"]
+  VM -->|"virtio-net, offloads off for untrusted classes (SEC-7 / I-7)"| TAP
+  TAP --- NFT --- TC --- VETH
+  VETH --- BR
+  TAP --- RT
+  BR --> EP
+  BR --> IP
+  BR --- FAB
+  RT -.->|"single-use boot token required (I-4)"| MP
+  EP -->|"re-originates in whatever family the destination requires (E-22)"| FAB
+  IP -->|"listener host-fabric-ip6:port → wip6:guest_port — the proxy is the sole path, no DNAT (I-14)"| BR
+
+  classDef defHost fill:#e8f0fb,stroke:#2c6fbb,color:#111;
+  classDef defNs fill:#e7f5e9,stroke:#2e7d32,color:#111;
+  classDef defGuest fill:#fdecea,stroke:#c0392b,color:#111;
+  class BR,EP,IP,MP,FAB defHost;
+  class TAP,NFT,TC,VETH,RT defNs;
+  class VM defGuest;
 ```
 
 - **One netns per workload** (FR-21): the VM's tap never shares an L2 with another
@@ -127,6 +169,20 @@ through the proxy, FR-20).
 5. No split tunneling, no exceptions path: an empty allow-list means no egress, and the
    workload cannot change that (E-2 logic applied to egress).
 
+**Fig. 14.2 — Egress path (§4, FR-20).** The guest never talks to a resolver or the internet
+directly; no NAT64/DNS64 machinery exists anywhere.
+
+```mermaid
+flowchart LR
+  G["guest (workload)"] -->|"any destination"| TAP["tap + nftables inside the netns"]
+  TAP -->|"transparent redirect, tcp/udp"| EP["egress-proxy (host-agent module)"]
+  EP -->|"EgressRule allow-list — FQDN or CIDR, family-agnostic<br/>DNS is resolved by the proxy (§4.4)"| CHK{"allowed?"}
+  CHK -->|"no — an empty allow-list means no egress (§4.5)"| DROP["dropped"]
+  CHK -->|"yes"| REO["re-originate in whatever family the destination requires (E-22)<br/>source = host egress address or the attached IPv4 (E-24)"]
+  REO --> NET["internet / private destination"]
+  TAP -.->|"tc token bucket, both directions — rate from the tenant quota (FR-22)"| EP
+```
+
 ## 5. Ingress (E-2 — IngressRule)
 
 1. `IngressRule` object (doc 09) → desired state → the **ingress proxy** on the hosting
@@ -144,6 +200,25 @@ through the proxy, FR-20).
    IPv4 and its listener move with the workload (E-24).
 4. L7 features (TLS termination, host routing) are P2 — v1 is L4; the proxy module
    boundary is where L7 lands if ever needed.
+
+**Fig. 14.3 — Ingress path and metadata (§5, I-14 / I-4).** No DNAT rule exists anywhere;
+revocation closes the listener immediately.
+
+```mermaid
+flowchart LR
+  C["client (v4 or v6)"] --> L["listener host-fabric-ip6:external_port<br/>source_ranges filter applied here (family-agnostic)"]
+  C -->|"attached IPv4 (E-24): the listener binds it 1:1"| L
+  L -->|"the proxy is the sole path — no bypass (I-14); every connection logged (SEC-23)"| P["ingress-proxy (host-agent module)"]
+  P -->|"forward"| W["wip6:guest_port inside the netns"]
+  R["IngressRule object (doc 09)"] -->|"desired state (I-12): open / close / migrate follows the workload"| L
+  M["guest: metadata request"] -->|"fe80::a9fe:a9fe/128 (E-25)"| MP["metadata-proxy"]
+  MP -->|"single-use boot-injected token required (I-4 / C-3)<br/>headers and network position are never identity (F0.1 / F17 closed)"| M
+
+  classDef defGuest fill:#fdecea,stroke:#c0392b,color:#111;
+  classDef defHost fill:#e8f0fb,stroke:#2c6fbb,color:#111;
+  class C,M,W defGuest;
+  class L,P,MP,R defHost;
+```
 
 ## 6. Security groups (VPC model, adopted v1 — the `SecurityGroup` object, doc 09)
 

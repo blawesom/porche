@@ -1,6 +1,6 @@
 # 12 — Software Architecture: Control Plane and Host-Side Software
 
-Working document — v4, 2026-10-18. The software-architecture spec A-7 deferred ("a
+Working document — v5, 2026-10-19. The software-architecture spec A-7 deferred ("a
 dedicated doc, post-PoC"); seeded by operator decisions **E-9/E-10** (doc 08 §E).
 It specifies: state authority, order flow, service decomposition, language/stack, and the
 state store. It does **not** re-open the plane model (E-8, doc 02 §3.1) or the data plane
@@ -13,6 +13,9 @@ v1 route-propagation decision (E-20).
 `ip4/32`); attached-IPv4 listener/attachment move with the workload at migration cutover.
 **v4 (E-26)**: desired-state wording — host bindings (not "allocations"); tenant-plane
 metering events served to tenants as `GetUsage`.
+
+**v5** (figures pass): Mermaid figures added (Fig. 12.1–12.3) — informative, the prose
+stays normative.
 
 ---
 
@@ -47,6 +50,32 @@ The incumbent's AMQP existed to *push orders*; I-12 deleted push. Therefore:
 - **Events are rows**: an append-only event table is the outbound stream (audit, metering,
   placement decisions, notifications); consumers poll or tail it.
 
+**Fig. 12.1 — Order, reconcile, report (§2, E-9 / I-12).** No message bus: the row committed
+is the order published.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as tenant (authenticated, untrusted)
+  participant TP as tenant-plane (API + scheduler)
+  participant DB as PostgreSQL (objects + pending calls + events)
+  participant HA as host-agent (outbound mTLS, I-11)
+  participant KMS as KMS
+  participant VM as CLH microVM
+
+  U->>TP: mutating call (CreateWorkload / CreateVolume / IngressRule)
+  TP->>DB: write objects + pending call in one transaction
+  Note over TP,DB: publication = commit — orders are rows (E-9)
+  TP-->>HA: desired-state delta (the host pulls — I-12)
+  HA->>KMS: unwrap the volume DEK (host identity, volume-scoped — SEC-24)
+  KMS-->>HA: DEK (host RAM / kernel keyring only, zeroized at detach)
+  HA->>VM: spawn the microVM (frozen device model — SEC-3/4, block + console only)
+  HA-->>TP: reports + events (rows in the append-only event table)
+  Note over HA,DB: the host owns reality — unbounded autonomy on partition (§1)
+  U->>TP: GetUsage / GetPlacement (read-only projections, FR-14)
+  TP-->>U: scoped answer — never fleet-global views
+```
+
 **Message bus = a scale component, deliberately deferred** (operator decision). Its eventual
 job is **async task execution** (bulk operations, fleet-wide rollouts, checkpoint
 compaction), not order transport. **Seam rule**: when a bus is introduced, it is a *consumer
@@ -73,6 +102,41 @@ Three services total; one per plane plus the shared trust anchor:
 - **Host identity, two channels**: the host-agent presents one host identity (certificate)
   to both planes; the admin channel carries lifecycle authority, the tenant channel carries
   workload desired state (E-8 rule 1).
+
+**Fig. 12.2 — Service decomposition and the one-binary roles (§3, I-13).** One Rust
+workspace, role-selected at startup; the console is a projection of the APIs (§9).
+
+```mermaid
+flowchart TB
+  subgraph bin["one Rust workspace — one audited binary, role-selected at startup"]
+    TP["porche tenant-plane"]
+    AP["porche admin-plane"]
+    KM["porche kms"]
+    HAg["porche host-agent"]
+    SW["porche storage-worker"]
+    BW["porche build-worker"]
+  end
+  WEB["porche-web (console-host) — separate workspace binary<br/>/w user console + /a admin console (E-28)"]
+  DB[("PostgreSQL — one cluster + synchronous replica, automated failover (Patroni-style)<br/>databases tenant / admin / kms — separate credentials, no cross-plane grants")]
+  SH["NFS shard — LUKS2 envelopes, ciphertext only"]
+  REG["version registry — signed, digest-pinned artifacts (I-5 / I-14)"]
+  TP -->|"objects + pending calls · events · metering"| DB
+  AP -->|"fleet + version state · audit Merkle chain (SEC-23)"| DB
+  KM -->|"wrapped DEKs — never the KEK"| DB
+  HAg -->|"gRPC over mTLS, host dials out only (I-11) — workload desired state"| TP
+  HAg -->|"same host identity (certificate) — admin lifecycle authority"| AP
+  SW -->|"create / clone / compaction — key-aware (I-2, C-5)"| SH
+  BW -->|"ImportImage → controlled rebuild (E-17) → signed image"| REG
+  WEB -->|"adapter: PoC in-process → P1 tonic clients (§9)"| TP
+  WEB -->|"/a admin surface — a session never spans both surfaces"| AP
+
+  classDef defSvc fill:#e8f0fb,stroke:#2c6fbb,color:#111;
+  classDef defStore fill:#fff3d6,stroke:#b8860b,color:#111;
+  classDef defMetal fill:#e7f5e9,stroke:#2e7d32,color:#111;
+  class TP,AP,KM,HAg,SW,BW,WEB defSvc;
+  class DB,REG defStore;
+  class SH defMetal;
+```
 
 ## 4. Language and stack (E-10)
 
@@ -132,6 +196,34 @@ gRPC over mTLS (tonic), **host dials out only** (I-11 — zero inbound ports on 
   both hosts hold identities; the lease bounds *what* and *how long*). At cutover, an
   **attached IPv4** moves with the workload: the listener and the attachment switch in
   the same transaction as the route rows (E-24, doc 14 §5).
+
+**Fig. 12.3 — Identity, channels, and the two authN domains (§6, FR-40 / SEC-20 / SEC-21).**
+One host identity, two authority channels; strong AuthN everywhere — there is no
+"internal network" exception.
+
+```mermaid
+flowchart TB
+  subgraph hostn["host — one identity: a certificate, enrolled in the KMS (attestation-gated)"]
+    HAg["host-agent"]
+    DST["desired-state table (SQLite/WAL — E-27)<br/>one table, origin-tagged rows: admin orders gate tenant rows (drain wins) — E-8 rule 1"]
+  end
+  OP["operator"]
+  AP["admin-plane"]
+  TU["tenant caller — authenticated ≠ trusted"]
+  TP["tenant-plane"]
+  KMS["KMS"]
+  META["metadata-proxy — single-use boot-injected token (I-4)"]
+  VM["guest (workload)"]
+  OP -->|"authN domain 2 (FR-40) — operator capability, fully audited (SEC-23)"| AP
+  TU -->|"authN domain 1 (FR-40) — tenant scope only, quota-enforced"| TP
+  HAg -->|"channel A — lifecycle authority only: drain · reimage · attest"| AP
+  HAg -->|"channel B — workload desired state only"| TP
+  AP -->|"reconciles into the same table — admin row precedence"| DST
+  TP -->|"reconciles into the same table"| DST
+  KMS -->|"workload token mint (I-4) · volume-scoped DEK unwrap (SEC-24) · bounded migration lease"| HAg
+  HAg -.->|"token injected once at boot"| VM
+  VM -->|"metadata at fe80::a9fe:a9fe (E-25) — token-gated; header or network position is never identity (F0.1 / F17 closed)"| META
+```
 
 ## 7. Explicitly excluded from v1
 

@@ -1,6 +1,6 @@
 # 05 — Dedicated Hosts, User Placement Views, Attract/Repulse Resiliency
 
-Working document — v4, 2026-10-18. **v2**: §7.1 adds live migration as a v1 goal (E-3,
+Working document — v5, 2026-10-19. **v2**: §7.1 adds live migration as a v1 goal (E-3,
 doc 08 A-9). **v3 (vocabulary sweep, E-16..E-21 pass)**: GPU phase prose → P2.
 **v4 (E-26)**: `HostAllocation` merged into **Host** — the binding is Host state
 (allocate = create, release = delete; doc 09 v7). Adds the
@@ -11,6 +11,9 @@ hosting model to `02-architecture.md`:
 3. **the legacy resiliency model is ported**: attract/repulse placement tags (soft/strict,
    host/group scopes), peer-group semantics as implemented in the legacy affinity resolution
    (doc 06 §4, "Placement/affinity").
+
+**v5** (figures pass): Mermaid figures added (Fig. 05.1–05.2) — informative, the prose
+stays normative.
 
 ---
 
@@ -30,6 +33,22 @@ hosting model to `02-architecture.md`:
   per tier E/R rules — R volumes restore from latest checkpoint on another of the user's
   hosts) → wipe (NVMe regions per SEC-14, LUKS envelopes detached) → `free`.
 
+**Fig. 05.1 — Host allocation lifecycle (§1.1, E-26).** The binding is Host state: allocate =
+create, release = delete (doc 09 v7).
+
+```mermaid
+stateDiagram-v2
+  direction LR
+  state "free — in the operator-managed pool" as free
+  state "allocated(user) — one user only (SEC-16)" as alloc
+  state "draining — no new placements" as drain
+  free --> alloc: AllocateHost (tenant plane, transactional)
+  alloc --> drain: ReleaseHost / TTL expired / platform maintenance
+  drain --> alloc: cancel while empty
+  drain --> free: workloads out + wipe reported (NVMe regions, SEC-14)
+  free --> [*]: decommission (admin plane)
+```
+
 ### 1.2 Failure domains (first-class)
 
 - **HostGroup** = a failure domain: rack, power/net domain, or maintenance domain (the legacy
@@ -37,6 +56,45 @@ hosting model to `02-architecture.md`:
   one HostGroup; groups carry metadata (rack id, power feed, maintenance calendar).
 - Resiliency reasoning happens at group granularity: "my 3 replicas live in 3 different
   HostGroups" is checkable and reportable (§2).
+
+**Fig. 05.2 — Fleet layout: failure domains, allocations, and the scheduler boundary
+(§1.1–§1.2, SEC-16).** Migration targets stay inside the owner's allocation (§7.1).
+
+```mermaid
+flowchart TB
+  POOL["free pool — platform-owned<br/>(admin plane lifecycle: drain, reimage, decommission)"]
+  subgraph allocA["User A allocation"]
+    subgraph hg7["HostGroup R7 — failure domain: rack / power / maintenance"]
+      HA1["host A1"]
+      HA2["host A2"]
+    end
+    subgraph hg8["HostGroup R8"]
+      HA3["host A3"]
+    end
+  end
+  subgraph allocB["User B allocation"]
+    subgraph hg9["HostGroup R9"]
+      HB1["host B1"]
+    end
+  end
+  SCH["scheduler (in-process in the tenant-plane)"]
+  VIEWS["placement views — ListHosts / GetPlacement / GetDistribution / GetResilienceReport<br/>scoped to the caller's allocations (FR-14)"]
+  SH["NFS storage shard — ciphertext only (I-2)"]
+  POOL -->|"AllocateHost (transactional placement)"| allocA
+  POOL -->|"AllocateHost (transactional placement)"| allocB
+  SCH -->|"candidate set ⊆ the owner's allocated hosts — cross-user co-location is structurally impossible"| allocA
+  SCH -->|"candidate set ⊆ the owner's allocated hosts"| allocB
+  allocA -.->|"never: a migration target outside the allocation (SEC-16)"| HB1
+  allocA -.-> VIEWS
+  allocB -.-> VIEWS
+  allocA --> SH
+  allocB --> SH
+
+  classDef defControl fill:#e8f0fb,stroke:#2c6fbb,color:#111;
+  classDef defMetal fill:#e7f5e9,stroke:#2e7d32,color:#111;
+  class SCH,VIEWS,POOL defControl;
+  class HA1,HA2,HA3,HB1,SH defMetal;
+```
 
 ### 1.3 Capacity & oversubscription
 

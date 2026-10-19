@@ -47,6 +47,16 @@ architecture) · doc 14 (workload networking). Full set: docs 01–14 live under
 (`doc 14 §3` = §3 of `doc/design/14-workload-networking.md`); new topics land as
 sections of existing documents, a new corpus file needs an E-register row (doc 08 §E).
 
+## Figures (diagrams)
+
+Every design/operations doc carries Mermaid figures (`Fig. NN.M`) next to the text they
+illustrate — rendered by GitHub or any IDE preview. Figures are informative: the prose
+stays normative. Entry points for new contributors: **02.1** control planes · **02.2**
+trust boundaries · **02.3** host virtualization layout · **02.4** encryption keys ·
+**04.1/04.2** storage tiers and checkpoints · **05.1/05.2** fleet, allocations ·
+**12.1–12.3** order flow, services, authN · **13.1** integration environment ·
+**14.1–14.3** workload network data path.
+
 ## Repository layout
 
 | Tree | Content |

@@ -1,10 +1,12 @@
 # 04 — Storage Tiers: Local Write-Back, Async Network Sync, Checkpoint Semantics
 
-Working document — v2, 2026-10-18. **v2**: tier R/S confirmed as the v1 stateful-workload
+Working document — v3, 2026-10-19. **v2**: tier R/S confirmed as the v1 stateful-workload
 path (E-1); live-migration volume semantics added (§2, E-3). Evaluates the proposal: **local storage for writes, async
 write-out to network storage, and "snapshot" redefined as a sync-to-network checkpoint.**
 Extends `02-architecture.md` §5 (I-2); supersedes the all-remote-NFS volume path for most
 workload classes.
+**v3** (figures pass): Mermaid figures added (Fig. 04.1–04.2) — informative, the prose
+stays normative.
 
 ---
 
@@ -51,7 +53,32 @@ Restore semantics:
 cutover — tier S by construction; tier R is **elevated to write-through (S semantics) for
 the migration window**, then demoted. The sealable tier-R stack (§3.1, A-1 spike) is a
 prerequisite for that elevation. Tier E stays on checkpoint migration (ephemeral by
-choice). See doc 02 §4.5.
+choice). See doc 02 §4.6.
+
+**Fig. 04.1 — The three durability tiers as device-mapper stacks (§2, §3.1; tier R is the
+candidate composition gated by the A-1 spike).** Ciphertext sits below the remote copy in
+every tier (§5).
+
+```mermaid
+flowchart TB
+  subgraph tierE["Tier E — ephemeral: local NVMe only, wiped at teardown"]
+    E1["guest block I/O"] --> E2["dm-crypt (LUKS2 envelope)"] --> E3["local NVMe region — raw sparse file (C-5)"]
+  end
+  subgraph tierR["Tier R — replicated-async: NVMe write-back + epoch sync"]
+    R1["guest block I/O"] --> R2["dm-crypt"] --> R3["dm-era — dirty tracking per epoch"] --> R4["dm-writecache (local NVMe hot)"] --> R5["remote LUKS2 envelope (origin) on the NFS shard"]
+    R3 -.->|"epoch ship: dirty ciphertext blocks only, CRC-verified (§3.2)"| R5
+  end
+  subgraph tierS["Tier S — synchronous"]
+    S1["guest block I/O"] --> S2["dm-crypt"] --> S3["write-through to the remote LUKS2 envelope (doc 02 §5.2 path)"]
+  end
+
+  classDef defE fill:#e8f0fb,stroke:#2c6fbb,color:#111;
+  classDef defR fill:#e7f5e9,stroke:#2e7d32,color:#111;
+  classDef defS fill:#fff3d6,stroke:#b8860b,color:#111;
+  class E1,E2,E3 defE;
+  class R1,R2,R3,R4,R5 defR;
+  class S1,S2,S3 defS;
+```
 
 ### 2.1 What each tier buys — performance, latency, and cost
 
@@ -128,6 +155,28 @@ incremental backup by marking blocks written per "era"):
    atomically record "checkpoint N sealed" in the control-plane state store → advance the epoch.
 3. Between checkpoints the remote image is possibly torn — it is *never* read except after a
    seal. After a seal it is exactly a crashed-disk image: guest fs journal replays.
+
+**Fig. 04.2 — Checkpoint seal and restore (§3.2, §4).** A seal is a power-cut-equivalent
+image; the previous checkpoint is never touched (write-ahead staging).
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant G as guest
+  participant ST as host volume stack (dm-crypt → dm-era / writecache)
+  participant NV as local NVMe region (hot)
+  participant SH as remote LUKS2 envelope (shard)
+  participant CP as control plane (state store)
+
+  G->>ST: fsync / flush (FUA) — durable against guest crash and host reboot
+  Note over ST,NV: quiesce: dm suspend or barrier — no write straddles the seal
+  ST->>NV: writes land and are acknowledged at NVMe speed
+  ST->>SH: ship the epoch's dirty ciphertext blocks into a staging area
+  SH-->>ST: CRC-verify every shipped block
+  ST->>CP: record checkpoint N sealed (atomic)
+  CP-->>ST: advance the epoch — a failed ship aborts the seal, the previous checkpoint stays
+  Note over G,SH: restore = boot on any host from a sealed checkpoint: the fs journal replays (crash-consistent)
+```
 
 Torn-write detection: every shipped block carries a CRC; a failed/short epoch ship aborts
 the seal and **the previous checkpoint is never touched** (write-ahead discipline: epoch N+1

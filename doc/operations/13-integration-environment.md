@@ -1,6 +1,6 @@
 # 13 — Integration Environment (Outscale cloud)
 
-Working document — v4, 2026-10-18. Defines and records the **integration environment**:
+Working document — v6, 2026-10-19. Defines and records the **integration environment**:
 PORCHE's "proper infra" simulated on Outscale cloud VMs, used for test and integration
 **before and alongside** the bare-metal PoC. This document is the contract between that
 environment and the design corpus: what it validates, what it deliberately never
@@ -14,6 +14,9 @@ IPv4-only. **v4**: FCOS sequencing clarified — stock stable OMI = the PoC host
 action 11). **v5**: 2026-10-19 cost pause — node 1 stopped (environment preserved on
 its root BSU), empty BSUs deleted, public IPs kept (operator); node-2 TF drift
 reconciled.
+
+**v6** (figures pass): topology figure added (Fig. 13.1) — informative, the prose stays
+normative.
 
 Related: doc 07 (the PoC — **executes here**, E-16; perf and security evidence stays on
 metal), doc 12 (software architecture validated here), doc 08 A-1/A-9 (the spikes hosted
@@ -82,6 +85,35 @@ segmentation expressed with security groups — one SG for management (SSH/ICMP 
 office), one for host↔control-plane (gRPC/mTLS), one for host↔shard (NFS + migration TLS
 port). The FR-30 storage-network reservation is host-side `tc` shaping on the metal nodes —
 testable here as-is.
+
+**Fig. 13.1 — Integration environment topology (§3–§5, Outscale `eu-west-2a`).** The cloud
+nodes emulate the metal layout; every perf and security *gate* stays metal-only (§2).
+
+```mermaid
+flowchart TB
+  OFFICE["office access — VPN / NAT egress (§4 item 7)"]
+  subgraph net["Outscale Net — public mode (§4 item 5); Nets are IPv4-only (§4 item 11)"]
+    subgraph ded["dedicated group Test1 — Placement.Tenancy = the group id · NestedVirtualization=true · p1 flag mandatory (§4 items 1–3)"]
+      N1["metal node 1 — tinav7.c8r16p1<br/>root BSU 50 GB = host OS · second BSU /dev/vdb = the 'NVMe region'<br/>ext4 label porche-nvme → /var/lib/porche (discard)<br/>CLH v54 pinned · SEC-11 sysctls · brporche · host-agent (§6)"]
+      N2["metal node 2 — the 2-host stage (A-9 migration spike)"]
+    end
+    NFS[("NFS shard VM — tinav7.c4r16, 500 GB<br/>export /export/porche — ciphertext only (A-4)")]
+    CP["control-plane VM — tinav7.c4r8<br/>tenant-plane + admin-plane + kms + Postgres (tenant / admin / kms)<br/>+ HTTP image service (role 5, folded in)"]
+  end
+  OFFICE -->|"SSH + ICMP — SG porche-integ-sg (office egress /32, §6)"| N1
+  N1 -->|"gRPC/mTLS out (I-11) — SG hostcp"| CP
+  N2 -->|"gRPC/mTLS out (I-11) — SG hostcp"| CP
+  N1 <-->|"NFS + migration TLS — SG hostshard"| NFS
+  N2 <-->|"NFS + migration TLS — SG hostshard"| NFS
+  N1 <-->|"v6-in-v4 tunnel (SIT/GRE) — transport substitution for cross-host workload v6 (E-22 / E-25)"| N2
+
+  classDef defMetal fill:#e7f5e9,stroke:#2e7d32,color:#111;
+  classDef defSvc fill:#e8f0fb,stroke:#2c6fbb,color:#111;
+  classDef defStore fill:#fff3d6,stroke:#b8860b,color:#111;
+  class N1,N2 defMetal;
+  class CP,OFFICE defSvc;
+  class NFS defStore;
+```
 
 ## 4. Outscale mechanics (learned — reproduce exactly)
 

@@ -1,6 +1,6 @@
 # 02 — Core Architecture Design (new orchestrator, incumbent design as reference)
 
-Working document — v9, 2026-10-18. Implements `01-requirements.md`.
+Working document — v10, 2026-10-19. Implements `01-requirements.md`.
 **v4** (doc 08 E-1..E-3): stateful workloads and ingress first-class v1; live migration
 is a v1 goal. **v5** (doc 08 E-4): **Cloud Hypervisor directly orchestrated — single
 runtime; Kata and containerd dropped** (§4, doc 08 A-9).
@@ -14,6 +14,8 @@ translation only at the proxies; legacy-v4 is a bounded exception; attached IPv4
 at the edge.
 **v9** (doc 08 E-26): host registry — the allocation is Host state (doc 09 v7:
 `AllocateHost`/`ReleaseHost` on the Host object).
+**v10** (figures pass): Mermaid figures added (Fig. 02.1–02.4) — informative, the prose
+stays normative.
 Simplification rationale: `03-simplification.md` (C-1..C-6, superseded in part by E-4 —
 see doc 03 §6).
 Storage durability tiers (local NVMe write-back + epoch sync, checkpoint semantics): `04-storage-tiers.md`.
@@ -134,6 +136,45 @@ Each improvement is traceable to a requirement (doc 01) and a root cause (assess
 The deployment is **multitenant**: the control plane splits into two separately-trusted
 planes, and the workload data plane is separate from both.
 
+**Fig. 02.1 — Three planes and the shared trust anchor (E-8).** What runs where, and which
+channel connects each piece.
+
+```mermaid
+flowchart TB
+  subgraph adminp["ADMIN control plane — platform operators"]
+    AP["admin-plane<br/>fleet lifecycle · version registry + deploy gates<br/>image pipeline ImportImage → build-worker (E-17)<br/>security monitoring · user / quota administration"]
+  end
+  subgraph tenantp["TENANT control plane — tenants (authenticated, untrusted)"]
+    TP["tenant-plane<br/>API (REST + gRPC mirror) · scheduler in-process<br/>quota · metering GetUsage · migration state machine"]
+  end
+  subgraph kmss["KMS — shared trust anchor, owned by neither plane"]
+    KMS["DEK wrap/unwrap · workload tokens · host enrollment (attestation-gated)<br/>KEK never enters PostgreSQL (E-15)"]
+  end
+  subgraph datap["WORKLOAD data plane"]
+    H["bare metal host — one user per host (SEC-16)<br/>host-agent → Cloud Hypervisor microVMs, one VMM per workload (E-4)<br/>per-workload netns + egress/ingress proxies · local NVMe regions"]
+    SH["NFS storage shard — ciphertext only"]
+  end
+  OP["operator"] --> AP
+  TU["tenant"] --> TP
+  DB[("PostgreSQL — one cluster, databases tenant / admin / kms<br/>objects + pending calls = orders · append-only events · audit chain (SEC-23)")]
+  AP -->|"orders and state are rows — no message bus (E-9)"| DB
+  TP -->|"orders and state are rows — no message bus (E-9)"| DB
+  KMS -->|"wrapped DEKs only"| DB
+  H -->|"outbound mTLS only, zero inbound ports (I-11) — admin lifecycle authority"| AP
+  H -->|"outbound mTLS only — workload desired state; deltas down, reports up (I-12)"| TP
+  H -->|"host identity: volume-scoped DEK unwrap · boot-token mint (I-2 / I-4)"| KMS
+  H -->|"LUKS2 envelopes, no keys (I-2, C-5)"| SH
+
+  classDef defUntrusted fill:#fdecea,stroke:#c0392b,color:#111;
+  classDef defControl fill:#e8f0fb,stroke:#2c6fbb,color:#111;
+  classDef defAnchor fill:#fff3d6,stroke:#b8860b,color:#111;
+  classDef defMetal fill:#e7f5e9,stroke:#2e7d32,color:#111;
+  class TU,TP defUntrusted;
+  class OP,AP,DB defControl;
+  class KMS defAnchor;
+  class H,SH defMetal;
+```
+
 | Plane | Consumers | Owns | Never |
 |---|---|---|---|
 | **Admin control plane** | platform operators only | host fleet lifecycle (free pool, drain, reimage, decommission), version registry + deploy gates, image build pipeline, security monitoring, user/quota administration | holds tenant volume keys; sees tenant workload payloads |
@@ -164,6 +205,40 @@ Cross-plane rules:
 6. **Allocation is the plane bridge**: `AllocateHost` is a tenant-plane operation
    fulfilled from the admin-managed free pool — the only place tenant authority creates
    claims on fleet resources (transactional placement, §1).
+
+**Fig. 02.2 — Trust boundaries: what may cross each one (doc 01 §0 adversary; SEC-1..24).**
+Solid arrows are sanctioned flows; dashed arrows are one-time or refused.
+
+```mermaid
+flowchart TB
+  subgraph untrusted["UNTRUSTED BY DESIGN"]
+    TU["tenant caller — authenticated is not trusted (SEC-20)"]
+    WL["the workload = reference adversary<br/>compromised AI agent · malicious build"]
+    NFS["NFS shard and its administrators — untrusted for confidentiality"]
+  end
+  subgraph tcb["PLATFORM TRUSTED COMPUTING BASE"]
+    PL["admin-plane / tenant-plane — blast radius is plane scope (E-8 rule 2)"]
+    KMS["KMS — trust anchor<br/>KEK: dev-mode P0/P1, HSM/quorum + key ceremony at GA (E-15)"]
+    HA["host-agent + dm stack + CLH<br/>hardened immutable OS (I-6) · disposable VMM per workload (SEC-13)"]
+  end
+  FAB(["inter-host fabric — hostile (I-11)"])
+  TU -->|"REST/gRPC in two authN domains (FR-40, SEC-20) — API objects only: IngressRule / EgressRule / SecurityGroup"| PL
+  PL -->|"orders become desired state (E-9) — workload traffic never transits a control plane (I-14)"| HA
+  HA -->|"outbound mTLS only (I-11) · reports — trusted for operations, never for security (A-3 attest/report split)"| PL
+  HA -->|"host identity → volume-scoped DEK unwrap; migration = time-bounded lease (SEC-24)"| KMS
+  HA -.->|"boot-injected single-use token (I-4)"| WL
+  WL -->|"metadata at fe80::a9fe:a9fe (E-25) — token-gated; headers and network position are never identity"| HA
+  HA -->|"LUKS2 ciphertext only — never a key, never plaintext (I-2, C-5)"| NFS
+  TU -.->|"never: host administration · fleet-global views · keys (E-8 rule 2, FR-14)"| HA
+  FAB -.->|"no inbound ports on hosts; no control relies on the fabric (SEC-20)"| HA
+
+  classDef defUntrusted fill:#fdecea,stroke:#c0392b,color:#111;
+  classDef defTCB fill:#e7f5e9,stroke:#2e7d32,color:#111;
+  classDef defEdge fill:#f4f4f4,stroke:#777,color:#111;
+  class TU,WL,NFS defUntrusted;
+  class PL,KMS,HA defTCB;
+  class FAB defEdge;
+```
 
 ---
 
@@ -215,6 +290,31 @@ itself disposable per SEC-13). No wrapper processes, no CRI hop, no shim, no ann
 VM configuration is built solely by the host-agent from the workload spec: devices from
 the frozen allow-list (SEC-3), no virtio-fs in v1 (SEC-6), resource ceilings (I-9), offload
 policy per workload class (I-7).
+
+**Fig. 02.3 — One host: the virtualization layout (E-4).** host-agent + CLH + kernel is the
+whole data plane — no Kata, no containerd, no shim, no guest agent.
+
+```mermaid
+flowchart TB
+  subgraph os["hardened immutable host OS — Fedora CoreOS derivative (E-5, I-6)<br/>verified boot · io_uring_disabled=2 · max_user_namespaces=0 · modules_disabled=1 · LSM per daemon (SEC-12)"]
+    HA["host-agent — lifecycle role (E-4): spawn · supervise · stop · reap · migrate<br/>drives the VMM over the CLH API on a local unix socket<br/>converges the per-host desired-state table (I-12, SQLite/WAL — E-27)"]
+    MP["metadata-proxy (single-use boot token, I-4)"]
+    NET["per-workload netns w-… · brporche · egress-proxy / ingress-proxy (doc 14)"]
+    subgraph per["per workload: one disposable VMM process (SEC-13), jailed in its netns"]
+      CLH["cloud-hypervisor<br/>frozen minimal device model (SEC-3/4): virtio-blk only (SEC-6) · virtio-net with offloads off (SEC-7)<br/>serial console recorded host-side (FR-6)"]
+    end
+  end
+  VM["microVM — workload<br/>platform guest image only: signed, digest-pinned (FR-31)<br/>no guest agent · no host↔guest channel exists (SEC-8)"]
+  NV["local NVMe region — tier E / tier R hot path (doc 04)"]
+  SH["NFS shard — tier S + remote LUKS2 envelopes, ciphertext only"]
+  HA -->|"API over local unix socket"| CLH
+  CLH --- VM
+  VM -.->|"stdio = serial console (virtio-console)"| CLH
+  CLH -->|"/dev/mapper/porche-… (dm-crypt, opened by the host before attach)"| NV
+  NV -->|"epoch ship: dirty ciphertext only (doc 04 §3.2)"| SH
+  HA --- MP
+  HA --- NET
+```
 
 ### 4.3 Storage path (block ops leave the VMM — unchanged by E-4)
 
@@ -307,6 +407,29 @@ should be able to read tenant data.
   envelope.
 - **Default-on, not opt-in**: creation path has no plaintext mode (SEC-15). Tenant-managed
   keys (CMK) are a P2 extension of the same wrapping hierarchy.
+
+**Fig. 02.4 — Encryption: key hierarchy and the attach path (I-2).** Teardown wipe is
+crypto-erase only (FR-3, E-6, SEC-14).
+
+```mermaid
+flowchart LR
+  KMS["KMS — the KEK never enters PostgreSQL<br/>dev-mode KEK for P0/P1 · HSM/quorum + key ceremony at GA (E-15)"]
+  DEK["per-volume DEK (LUKS2 volume key) — minted at volume create"]
+  DB[("kms database — wrapped DEKs only")]
+  HA["host-agent — authenticated as the workload's host"]
+  ENV["LUKS2 envelope on the shard — raw sparse image inside (C-5) · ciphertext only"]
+  DM["cryptsetup open → /dev/mapper/porche-…<br/>dm-crypt AES-XTS · key kept in the kernel keyring, zeroized at detach"]
+  CLH["CLH virtio-blk — plaintext exists only in host RAM"]
+  WIPE["teardown: kill → unmap → wipe<br/>crypto-erase = zeroize the DEK + TRIM/discard (E-6, SEC-14)"]
+  KMS -->|"mints and wraps under the KEK"| DEK
+  DEK -->|"stored wrapped — a stolen row is useless"| DB
+  DB -->|"fetch wrapped DEK by volume id"| HA
+  HA -->|"unwrap over mTLS — host identity, volume-scoped (SEC-24)"| KMS
+  KMS -->|"DEK stays in host RAM / kernel keyring"| DM
+  ENV -->|"ciphertext volume file read from the shard"| DM
+  DM -->|"decrypted device"| CLH
+  CLH --> WIPE
+```
 
 ### 5.3 What it does NOT cover (explicit non-goals)
 
