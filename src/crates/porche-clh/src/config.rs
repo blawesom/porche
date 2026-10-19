@@ -68,12 +68,43 @@ impl VmConfig {
 
 /// The kernel cmdline the host-agent builds (E-25): the guest never configures
 /// itself — address and gateway arrive on the command line, applied by the platform
-/// init; `porche.cmd` is the workload command (single shell string).
+/// init. The command is base64-encoded: the kernel splits cmdline on spaces, so the
+/// workload command must ride as a single space-free token.
 pub fn build_cmdline(spec: &porche_core::WorkloadSpec) -> String {
     format!(
         "console=ttyS0 porche.ip6={},{} porche.cmd={}",
-        spec.ip6, spec.gw6, spec.command
+        spec.ip6,
+        spec.gw6,
+        base64(spec.command.as_bytes())
     )
+}
+
+/// Minimal base64 (standard alphabet, padded) — the encoding for cmdline-safe
+/// tokens. No dependency on purpose (doc 12 §4: boring).
+fn base64(input: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
+    for chunk in input.chunks(3) {
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        out.push(ALPHABET[(n >> 18) as usize & 63] as char);
+        out.push(ALPHABET[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 {
+            ALPHABET[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            ALPHABET[n as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    out
 }
 
 #[cfg(test)]
@@ -99,7 +130,26 @@ mod tests {
         let c = build_cmdline(&spec());
         assert!(c.contains("console=ttyS0"), "{c}");
         assert!(c.contains("porche.ip6=fd00:abcd::1,fd00:abcd::ff"), "{c}");
-        assert!(c.contains("porche.cmd=echo ok"), "{c}");
+        // the command is base64-encoded (space-free token)
+        let b64 = c.split_whitespace()
+            .find(|w| w.starts_with("porche.cmd="))
+            .expect("porche.cmd key");
+        assert_eq!(b64, "porche.cmd=ZWNobyBvaw==", "{c}");
+        // no raw spaces from the command leak into the cmdline
+        assert!(!c.contains("echo ok"), "{c}");
+    }
+
+    #[test]
+    fn base64_matches_reference_vectors() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foo"), "Zm9v");
+        assert_eq!(base64(b"foob"), "Zm9vYg==");
+        assert_eq!(base64(b"fooba"), "Zm9vYmE=");
+        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+        // space-free alphabet only
+        assert!(!base64(b"echo alive > /dev/console").contains(' '));
     }
 
     #[test]

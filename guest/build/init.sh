@@ -38,11 +38,13 @@ ip route add default via "$gw" dev eth0
 # --- the PERF-1 T1 marker -------------------------------------------------------
 echo "porche.ready" > /dev/console
 
-# --- workload command: porche.cmd=<shell string> --------------------------------
+# --- workload command: porche.cmd=<base64 shell string> --------------------------
+# (base64: the kernel splits cmdline on spaces — one space-free token)
 cmd=""
 for w in $(cat /proc/cmdline); do
     case "$w" in
-        porche.cmd=*) cmd=${w#porche.cmd=} ;;
+        porche.cmd=*) cmdraw=${w#porche.cmd=}
+                      cmd=$(echo "$cmdraw" | base64 -d) ;;
     esac
 done
 

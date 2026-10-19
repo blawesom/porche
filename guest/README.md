@@ -43,7 +43,7 @@ fetch; the commit is where a human attests it.
 |---|---|---|
 | `console=ttyS0` | serial console — the marker channel | harness (PERF-1 T1) |
 | `porche.ip6=<addr>,<gw>` | the /128 + gateway (E-25) | init.sh |
-| `porche.cmd=<string>` | workload command (sh -c) | init.sh |
+| `porche.cmd=<base64>` | workload command (base64 of the sh -c string; one space-free cmdline token) | init.sh |
 | `porche.ready` printed to /dev/console | boot-complete marker | harness |
 | `porche.done rc=<n>` printed | command exit | loop tests |
 | `/dev/vda` | the tier-E volume (LUKS2 mapper, raw) | workload (markers) |
