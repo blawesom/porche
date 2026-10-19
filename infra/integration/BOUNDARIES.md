@@ -33,12 +33,22 @@ the VM itself is untouched), the NFS VM, the control-plane VM, the
 
 Verified state after the 2026-10-18 partial apply: metal node 2
 (`i-2727754e`) was created out-of-band and **terminated the same day**
-(it no longer exists; the local TF state still records it — reconcile
-before the next apply). What survives in the account: both 200 GB BSUs
+(it no longer exists; the local TF state still recorded it — see the
+2026-10-19 clearing below). What survived in the account: both 200 GB BSUs
 (`vol-414ae55c` node 1, `vol-c14305ae` node 2 — both unlinked), the
 `hostcp`/`hostshard` SGs with their rules, and three unlinked public
 IPs (`eipalloc-7df5877e` node 2, `eipalloc-64230109` NFS,
 `eipalloc-37f28ba3` control plane).
+
+**Cleared 2026-10-19 (cost pause, operator)**: metal node 1 **stopped**
+(physical server released; root BSU, Rocky 9, nested-virt config and the
+CLH v54 install kept for instant resume), both 200 GB BSUs **deleted**
+(provisioned, never used), the four public IPs **kept allocated**
+(operator decision — all unlinked), and the TF state **reconciled**: the
+dead `metal_node2` VM record, both `*_nvme` volume + volume-link records
+removed (serial 8, backup in `state-backups/`); the next `tofu plan`
+shows `+` create lines only, per the hard rule. Remaining billed: node
+1's 50 GB root BSU.
 
 ## NOT PORCHE — untouchable, present in the account
 

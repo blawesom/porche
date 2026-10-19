@@ -11,7 +11,9 @@ security gate; "functionally" for the escape suite made explicit (baseline-delta
 (transport substitution); native v6 fabric = metal-only. Outscale Nets recorded as
 IPv4-only. **v4**: FCOS sequencing clarified — stock stable OMI = the PoC host base
 (recorded run), lean derivative = action 13 (P0); §8 pointer fixed (was mis-aimed at
-action 11).
+action 11). **v5**: 2026-10-19 cost pause — node 1 stopped (environment preserved on
+its root BSU), empty BSUs deleted, public IPs kept (operator); node-2 TF drift
+reconciled.
 
 Related: doc 07 (the PoC — **executes here**, E-16; perf and security evidence stays on
 metal), doc 12 (software architecture validated here), doc 08 A-1/A-9 (the spikes hosted
@@ -146,21 +148,29 @@ control plane:
 | Resource | ID | Status (verified via octl, 2026-10-18 evening) |
 |---|---|---|
 | Dedicated group `Test1` | `ded-53c8318b` (eu-west-2a, gen 7) | pre-existing, in use |
-| Metal node 1 (validation) | `i-7482ee3c` (`tinav7.c8r16p1`, nested virt) | **running** — CLH v54.0 boots guests; root BSU only; ephemeral public IP `171.33.73.205` (its EIP is disassociated: public IPs drop when a VM stops) |
-| Node 1 public IP | `eipalloc-84925ae5` (`148.253.126.10`) | allocated, **unlinked** |
-| Node 1 second BSU | `vol-414ae55c` (200 GB) | allocated, **unlinked** |
+| Metal node 1 (validation) | `i-7482ee3c` (`tinav7.c8r16p1`, nested virt) | **stopped** (2026-10-19 cost pause) — CLH v54.0 booted guests; environment preserved on the root BSU; resumes with `StartVms` |
+| Node 1 public IP | `eipalloc-84925ae5` (`148.253.126.10`) | allocated, **unlinked** (kept — operator decision, 2026-10-19) |
+| Node 1 second BSU | `vol-414ae55c` (200 GB) | **deleted** (2026-10-19 clearing — never used; re-created by `tofu apply`) |
 | SG `porche-integ-sg` | `sg-ba94b9e2` | deployed |
 | Keypair `porche-integ` | local `id_ed25519_research` | deployed |
 | SGs `hostcp` / `hostshard` | `sg-6145a812` / `sg-63985462` | deployed (gRPC, NFS, migration-TLS rules) |
 | Public IPs (node 2 / NFS / CP) | `eipalloc-7df5877e` / `eipalloc-64230109` / `eipalloc-37f28ba3` | allocated, unlinked |
-| Metal node 2 | `i-2727754e` | **created 2026-10-18, terminated the same day** — gone from the account; the local TF state still records it (**drift: reconcile before the next apply**) |
-| Node 2 second BSU | `vol-c14305ae` (200 GB) | allocated, unlinked |
+| Metal node 2 | `i-2727754e` | **terminated 2026-10-18**; TF-state drift **reconciled 2026-10-19** — recreate per §5 at the 2-host stage |
+| Node 2 second BSU | `vol-c14305ae` (200 GB) | **deleted** (2026-10-19 clearing) |
 | NFS VM, control-plane VM | — | **not yet provisioned** (recipe §5) |
 
 Note: node 1 currently runs stock Rocky 9 — it was the nested-virt validation vehicle.
 **Sequencing (doc 07 §7.1)**: the harness develops on Rocky (the acceptable interim);
 the **recorded PoC run** moves to the **FCOS stable OMI** (§8 open item), and to the
 **lean derivative** (action 13) for P0.
+
+**Cleared for cost, 2026-10-19 (operator)**: node 1 is **stopped** (physical server
+released; the environment — Rocky 9, nested-virt config, CLH v54 — is preserved on its
+root BSU and resumes on `StartVms`), both empty 200 GB BSUs are **deleted** (never used;
+`tofu apply` re-creates them as `+` lines), and the public IPs stay **allocated but
+unlinked** (operator decision). The only billed PORCHE resource left is node 1's root
+BSU. `make down`/`make up` are safe again: the node-2 drift is reconciled out of the
+TF state.
 
 ## 7. Operations
 
@@ -176,9 +186,12 @@ the **recorded PoC run** moves to the **FCOS stable OMI** (§8 open item), and t
 ## 8. Open items
 
 - [x] Provision second BSUs + host SGs (`hostcp`/`hostshard`) + public IPs (2026-10-18,
-      via the repository's `infra/integration/`).
-- [ ] Provision metal node 2 (created 2026-10-18, **terminated the same day** — recreate
-      per §5; reconcile the local TF state first: it still records the terminated VM).
+      via the repository's `infra/integration/`). *2026-10-19 clearing: both BSUs
+      deleted (cost pause, never used); the public IPs stay allocated. `tofu apply`
+      re-creates the volumes as `+` lines when needed.*
+- [x] Metal node 2 — **cleared 2026-10-19**: the out-of-band termination (2026-10-18) is
+      reconciled out of the TF state (dead VM + volume/link records removed); not
+      needed until the 2-host stage (A-9 spike), then recreated per §5.
 - [ ] Provision the NFS VM + control-plane VM (§5) — SGs and public IPs exist; VM
       creation pending.
 - [ ] FCOS derivative OMI (import qcow2 → OMI; Ignition via user-data — verify metadata
