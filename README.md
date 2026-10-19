@@ -30,7 +30,7 @@ The corpus is four thematic directories plus this index:
 |---|---|---|
 | `spec/` | the contract (normative) | 01 requirements · 09 API + tenant surface map · 11 glossary |
 | `design/` | how it works (informative) | 02 architecture · 04 storage tiers · 05 dedicated hosts · 12 software · 14 networking |
-| `decisions/` | why — evidence + chronology | 03 simplification · 06 design basis · 08 review + E-register |
+| `decisions/` | why — evidence + chronology | 03 simplification (merged into doc 08 §F — stub) · 06 design basis · 08 review + E-register |
 | `operations/` | build & run (procedures) | 07 PoC · 10 upgrade & migration · 13 integration environment |
 
 Rules:
@@ -49,7 +49,7 @@ Rules:
 |---|----------|------|
 | 01 | [requirements](spec/01-requirements.md) | Requirements specification (FR / SEC / PERF / OPS) + traceability |
 | 02 | [architecture](design/02-architecture.md) | Core architecture (new build, incumbent design as reference): layers, improvement register |
-| 03 | [simplification](decisions/03-simplification.md) | Simplification pass: what the new build does NOT re-implement (C-1..C-6) |
+| 03 | [simplification](decisions/03-simplification.md) | **Merged into doc 08 §F** — pointer stub (`doc 03 §N` = `doc 08 §F.N`) |
 | 04 | [storage tiers](design/04-storage-tiers.md) | Local NVMe write-back + async epoch sync; checkpoint ("snapshot") semantics, consistency, economics |
 | 05 | [dedicated hosts](design/05-dedicated-hosts.md) | One user per bare metal host; placement views; attract/repulse resiliency model |
 | 06 | [design basis](decisions/06-design-basis.md) | Self-contained research record: isolation landscape, CVE history, assessment findings (F-register), incumbent design, stack decision |
