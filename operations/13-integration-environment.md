@@ -1,6 +1,6 @@
 # 13 — Integration Environment (Outscale cloud)
 
-Working document — v3, 2026-10-18. Defines and records the **integration environment**:
+Working document — v4, 2026-10-18. Defines and records the **integration environment**:
 PORCHE's "proper infra" simulated on Outscale cloud VMs, used for test and integration
 **before and alongside** the bare-metal PoC. This document is the contract between that
 environment and the design corpus: what it validates, what it deliberately never
@@ -9,7 +9,9 @@ validates, how it is built, and how it is operated.
 security gate; "functionally" for the escape suite made explicit (baseline-delta method).
 **v3 (E-22/E-25)**: IPv6-first — cross-host v6 validated here over a **v6-in-v4 tunnel**
 (transport substitution); native v6 fabric = metal-only. Outscale Nets recorded as
-IPv4-only.
+IPv4-only. **v4**: FCOS sequencing clarified — stock stable OMI = the PoC host base
+(recorded run), lean derivative = action 13 (P0); §8 pointer fixed (was mis-aimed at
+action 11).
 
 Related: doc 07 (the PoC — **executes here**, E-16; perf and security evidence stays on
 metal), doc 12 (software architecture validated here), doc 08 A-1/A-9 (the spikes hosted
@@ -156,8 +158,9 @@ control plane:
 | NFS VM, control-plane VM | — | **not yet provisioned** (recipe §5) |
 
 Note: node 1 currently runs stock Rocky 9 — it was the nested-virt validation vehicle.
-Metal nodes move to the **FCOS derivative OMI** once built (action 11); Rocky + hardening
-sysctls is the acceptable interim.
+**Sequencing (doc 07 §7.1)**: the harness develops on Rocky (the acceptable interim);
+the **recorded PoC run** moves to the **FCOS stable OMI** (§8 open item), and to the
+**lean derivative** (action 13) for P0.
 
 ## 7. Operations
 
@@ -179,7 +182,9 @@ sysctls is the acceptable interim.
 - [ ] Provision the NFS VM + control-plane VM (§5) — SGs and public IPs exist; VM
       creation pending.
 - [ ] FCOS derivative OMI (import qcow2 → OMI; Ignition via user-data — verify metadata
-      compatibility; fallback: bake config into the OMI). Unblocks action 11 validation.
+      compatibility; fallback: bake config into the OMI). Unblocks the **E-5 PoC host
+      base** (doc 07 §2/§7.1 — the recorded PoC run lands here) and action 13's
+      production image.
 - [ ] SG set for host↔control-plane and host↔shard flows (gRPC, NFS, migration TLS port).
 - [ ] Net-tenancy question: verify whether a dedicated-group Net can host default-tenancy
       VMs (if yes, migrate topology off public mode for cleaner segmentation).

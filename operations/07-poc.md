@@ -1,6 +1,6 @@
 # 07 — PoC Scope (pre-P0)
 
-Working document — v7, 2026-10-18. **v2**: live migration explicitly deferred (v1 goal,
+Working document — v8, 2026-10-18. **v2**: live migration explicitly deferred (v1 goal,
 not PoC scope — E-3). **v3 (E-4)**: PoC re-targeted to **direct Cloud Hypervisor
 orchestration** — no containerd, no Kata. **v4 (E-5)**: PoC host = **Fedora CoreOS,
 stable stream** — the tracked upstream. **v5 (E-6/E-7)**: wipe = crypto-erase only;
@@ -9,7 +9,10 @@ escape suite mapped to hardening controls. **v6 (E-16/E-17/E-18)**: the PoC exec
 mechanism-only smoke signals, metal keeps every gate; the escape suite validates by
 baseline **delta**; create takes platform images only. **v7 (E-22/E-25)**: the guest boots
 **IPv6 from the cmdline** (single-host scope); cross-host v6, legacy v4, and attached v4
-stay deferred. Defines the **first proof of concept**: the smallest
+stay deferred. **v8 (test plan + sequencing)**: §7 concretizes the test plan — methods,
+samples, thresholds, wipe probe, baseline toggles, results template; the harness develops
+on node 1's Rocky interim, the recorded PoC runs on the FCOS OMI (E-5 unchanged —
+sequencing, not scope). Defines the **first proof of concept**: the smallest
 buildable system that validates the riskiest technical bets of the design. Everything not
 listed in scope is **deferred by decision**, not forgotten — see §3.
 
@@ -36,7 +39,7 @@ not after building a control plane around it.
 
 | Item | Content | Validates |
 |---|---|---|
-| 1 host — **integration environment** (E-16) | **Fedora CoreOS, stable stream** (E-5 — the tracked upstream) as a VM on the doc-13 dedicated group (nested virtualization; CLH boots guests on a gen-7 node — doc 13 §4). PERF and hardening *evidence* numbers are metal-only (E-16); here they are smoke signals. + kernel hardening **sysctls only** (io_uring off, userns off, core_pattern, modules_disabled) | SEC-11 subset |
+| 1 host — **integration environment** (E-16) | **Fedora CoreOS, stable stream** (E-5 — the tracked upstream) as a VM on the doc-13 dedicated group (nested virtualization; CLH boots guests on a gen-7 node — doc 13 §4). PERF and hardening *evidence* numbers are metal-only (E-16); here they are smoke signals. + kernel hardening **sysctls only** (io_uring off, userns off, core_pattern, modules_disabled). **Sequencing (§7.1)**: harness develops on node 1's Rocky 9 interim (doc 13 §6); the **recorded PoC run** is on the FCOS OMI once imported | SEC-11 subset |
 | **Cloud Hypervisor (direct)** | host-agent drives CLH over its local API — no containerd, no shim, no annotations (E-4); devices from the frozen allow-list (SEC-3), resource ceilings in VM config (I-9) | I-1, SEC-3/5 |
 | Guest image | minimal rootfs built in-house (kernel + initramfs + rootfs running the workload command), pinned by digest — the signing pipeline is P0 (doc 08 action 11); **init sets the v6 address from the cmdline key** (`porche.ip6=` — E-22/E-25: the bootstrap mechanism the PoC proves) | FR-31 subset |
 | **host-agent skeleton** (the only new code) | CLI, 4 verbs: `create / status / stop / wipe`. **CLH API client** + `cryptsetup open` + teardown wipe. Written as the **role-neutral core of the one binary** (I-13) and shaped for **reconciliation** (I-12: verbs operate on a local desired-state table, so the P0 control plane replaces the CLI writer, not the agent) | C-4 shape, I-11..13 |
@@ -125,3 +128,76 @@ early, not kill).
   is wrong for this stack
 
 Any of these is a *cheap failure* at PoC scale — which is the point.
+
+## 7. Test plan: methods, samples, thresholds
+
+Every success criterion in §2 becomes an acceptance test here: one observation method,
+one sample size, one threshold, one verdict. The PoC exits with **§7.5 filled in and
+committed** alongside the run artifacts.
+
+### 7.1 Fixture pinning
+
+Each run records its fixtures (SEC-30-style traceability):
+
+| Fixture | Recorded at run time |
+|---|---|
+| Node OS + kernel | image digest + `uname -r` (Rocky interim or FCOS OMI — sequencing below) |
+| CLH | version + digest (v54.0 verified on node 1 — doc 13 §4) |
+| Guest image | kernel + rootfs digests (action 11 artifact) |
+| Host-agent | commit hash of the run |
+| Hardening state | sysctl script output (§7.2) + offload/allow-list state |
+
+**Sequencing (operator decision, 2026-10-18)**: the harness develops on node 1's
+Rocky 9 interim; the **recorded PoC run** is on the **FCOS stable OMI** once imported
+(doc 13 §8) — E-5 unchanged; this is sequencing, not scope.
+
+### 7.2 Methods and thresholds
+
+| Criterion | Observation method | n | Threshold |
+|---|---|---|---|
+| PERF-1 — create → running | host-agent stamps `create` (T0); guest init prints a `porche.ready` marker on the serial console; harness timestamps the line | 100 runs after 10 warmups | P50 < 1.5 s (**smoke** — E-16) |
+| PERF-5 — density | procfs RSS sampler per CLH process (1 Hz); steady state = 60 s after boot | 20 parallel VMs | < 200 MB RSS each; zero VM/host-agent anomalies over 10 min |
+| PERF-8 — teardown timing | per-cycle teardown duration across the loop | all 1,000 cycles | P99 < 2 s (**timing smoke**); the loop itself is a **gate** |
+| PERF-8 — memory drift | `MemAvailable` floor + host-agent cgroup RSS sampled each cycle | cycles 200 and 1,000 | drift < 5 % |
+| Wedge detection | host-agent liveness self-probe + create probe | continuous | liveness timeout 30 s, or a create > 60 s ⇒ wedge ⇒ fail |
+| Wipe (E-6 semantics) | guest writes known markers before wipe; after wipe: mapper device absent, keyfile + kernel keyring empty, LUKS2 key slots nulled, region scan (as root) finds no *cryptographically recoverable* marker material; discard/trim report recorded | every wiped volume | all checks pass. **TRIM is verified in the lab via the discard report only — the NAND/physical claim is metal-only (E-16)** |
+| Escape delta (E-18) | each PoC/exercise runs twice — hardened config and unhardened baseline (§7.3) | per §7.3 | **the delta**: fails on hardened *and* exercises the surface on baseline; failing on both = version floor only (SEC-31) |
+| Sysctl verification | boot script asserts each SEC-11 item | every boot | `kernel.io_uring_disabled=2`, `user.max_user_namespaces=0`, `core_pattern` locked, `modules_disabled=1` |
+
+### 7.3 Baseline toggles for the delta runs (E-18 — the reproducible part)
+
+| Test | Hardened config (the control) | Unhardened baseline | Validates |
+|---|---|---|---|
+| virtio-net offload attack (PwnEscape class) | offloads **off** at virtio-net + tap | offloads **on** (checksum, TSO/GSO/GRO) | SEC-7/I-7 |
+| CLH device-model escape | frozen device allow-list, no legacy devices | expanded device set (what the PoC requires) | SEC-3/4 |
+| 2026 page-cache/userns kernel cluster | hardened sysctls | stock sysctl defaults | SEC-11 |
+
+### 7.4 Escape-run safety rules (shared account — `infra/integration/BOUNDARIES.md`)
+
+- Exploit/PoC material runs **only inside our node VMs' guests** (workload → nested-host
+  boundary). Nothing is authored, aimed, or released against the Outscale boundary or any
+  resource that is not PORCHE-owned.
+- **Abort on anomaly**: any unexpected process, listener, or connectivity outside the
+  expected composition stops the run and is reported (SEC-41 logic).
+- Delta verdicts are *control* claims, never security-evidence claims (E-16/E-18) —
+  security evidence is metal-only.
+
+**Open point — escape artifact policy** (operator decision pending): real public PoCs
+per class vs synthetic surface exercises vs hybrid (synthetic for the delta controls +
+real PoCs where safely reproducible; full artifacts in the metal run / SEC-40). Hybrid
+is the working proposal.
+
+### 7.5 Results record (the PoC exit artifact)
+
+| Criterion | Method | n | Threshold | Measured | Verdict |
+|---|---|---|---|---|---|
+| PERF-1 (smoke) | console marker | 100 | P50 < 1.5 s | | |
+| PERF-5 (smoke) | RSS sampler | 20 | < 200 MB each | | |
+| PERF-8 loop (**gate**) | create/wipe | 1,000 | no wedge, < 5 % drift | | |
+| PERF-8 timing (smoke) | per-cycle | 1,000 | P99 < 2 s | | |
+| Wipe probe | markers + key slots | all | no recoverable data | | |
+| Escape delta | §7.3 toggles | 3 | delta present | | |
+| Sysctl script | boot assert | every boot | all pass | | |
+
+The filled table plus the §7.1 fixture record is committed with the run; the PoC is done
+when the table is green — or a §6 kill criterion fired.

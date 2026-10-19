@@ -51,6 +51,18 @@ IPs (`eipalloc-7df5877e` node 2, `eipalloc-64230109` NFS,
 | Keypairs | heckle-work2, skr2024, al_squadra, skr2025, cyber_ble, research-p3, research-oapi, interview |
 | Net | `vpc-9159e604` (used by qa-test SGs — not porche's) |
 
+## Exploit / PoC runs (doc 07 §7.4)
+
+1. Exploit and PoC material runs **only inside our node VMs' guests** (the
+   workload → nested-host boundary). Nothing is authored, aimed, or released
+   against the Outscale boundary, the outer hypervisor, or any resource that
+   is not PORCHE-owned (tables above).
+2. **Abort on anomaly**: any unexpected process, listener, or connectivity
+   outside the expected composition stops the run and is reported (SEC-41
+   logic). The shared account makes this a hard rule, not a guideline.
+3. Escape-run verdicts in this environment are **control-delta claims only**
+   (E-16/E-18); security evidence is metal-only.
+
 ## Hard rules
 
 1. `tofu plan` must contain **only `+` (create) lines** for
