@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Workloads</h1>
+<p><a href="/w/new">+ create workload</a></p>
+{% if records.is_empty() %}
+<p class="subtle">No workloads.</p>
+{% else %}
+<table>
+<tr><th>id</th><th>state</th><th>vcpu</th><th>ram</th><th>ip6</th><th>volume</th><th>created</th></tr>
+{% for r in records %}
+<tr>
+  <td><a href="/w/{{ r.id }}">{{ r.id }}</a></td>
+  <td class="{{ r.state_class }}">{{ r.state_line }}</td>
+  <td>{{ r.vcpu }}</td>
+  <td>{{ r.ram_mib }}M</td>
+  <td>{{ r.ip6 }}</td>
+  <td>{{ r.volume }}</td>
+  <td class="subtle">{{ r.created }}</td>
+</tr>
+{% endfor %}
+</table>
+{% endif %}
+{% endblock %}

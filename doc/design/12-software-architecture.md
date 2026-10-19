@@ -89,6 +89,7 @@ only; C forbidden outside audited components (CT-2 unchanged).
 | DB access | sqlx | compile-time-checked SQL; no ORM magic in the transactional core |
 | State store | PostgreSQL | already the corpus assumption (wrapped DEKs); transactional placement needs ACID |
 | Deployment | static binaries in the FCOS derivative image (E-5) | no runtime dependencies on hosts |
+| Console (E-28) | axum + askama + HTMX (vendored) | server-rendered projection of the API; no SPA, no JS toolchain — see §9 |
 
 ## 5. State store and availability (E-10)
 
@@ -150,3 +151,35 @@ boundary** — the two seams this design preserves on purpose.
 - [ ] Admin-plane monitoring ingestion (metrics ride the admin channel — volume and
       retention to size).
 - [ ] Failover drill procedure (A-8: prove OPS-1 before claiming it).
+
+## 9. Console surfaces — the console-host (E-28)
+
+One Rust web service (the **console-host**, workspace binary `porche-web`) serves
+both UIs: `/w` (user console — tenant plane) and `/a` (admin console — admin
+plane), against the page inventories in doc 09 §Console surfaces. Design rules:
+
+- **Pure projection**: every button maps to a doc-09 method; no console-side
+  scheduling, policy, or state — the console renders and submits. Attribute
+  visibility rides the per-projection rule (FR-14/SEC-16): enforced at the
+  adapter, never in the templates.
+- **Adapter seam**: a `ConsoleApi` trait whose method names **are** the frozen
+  map. PoC adapter: desired-state store + host-agent ops in-process (doc 07
+  Stage 1). P1 adapter: tonic clients to the two planes. The UIs survive the swap.
+- **Two authN domains** (E-8/FR-40): stage 1 carries an optional bearer token;
+  the real domains land with the planes (SEC-20). A session never spans both
+  surfaces.
+- **Audit**: every mutation through the console = one audit entry (the E-26
+  convention); the admin console's audit page reads the same stream the planes
+  write. Deletion renders the **wipe report** — operations, not row removal.
+- **Stack** (per §4): axum + askama (server-rendered) + HTMX **vendored and
+  digest-pinned** for live updates — one static binary, no JS toolchain, no SPA.
+  Live updates are polled fragments (console-log tail, state refresh), not
+  sockets: v1 UX does not need push.
+- **Executor serialization (Stage 1)**: host-agent ops take `&mut` — mutations
+  hold one executor lock, the same single-writer model the CLI has today.
+  I-12 reconciliation (the host-agent converging autonomously) removes the
+  constraint in P1.
+- The host-agent binary stays dependency-minimal (static musl, **no async
+  runtime** — the E-5 discipline keeps its audit surface small); hence a separate
+  workspace binary rather than a `porche console` role. Fold into the role list
+  or keep the web edge separate — decided at P1.

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Fleet</h1>
+{% if mode == "dry" %}
+<div class="banner err-banner">dry mode — nothing executes on the host; the UX
+cycle is the demo (Runner::Dry, doc 07). Live mode runs the real verbs.</div>
+{% endif %}
+<table>
+<tr><th>host</th><td>{{ hostname }}</td></tr>
+<tr><th>kernel</th><td>{{ osrelease }}</td></tr>
+<tr><th>uptime</th><td>{{ uptime }}</td></tr>
+<tr><th>loadavg</th><td>{{ loadavg }}</td></tr>
+<tr><th>memory</th><td>{{ mem_total_mb }} MB total, {{ mem_avail_mb }} MB available</td></tr>
+<tr><th>workloads (desired-state table)</th><td>{{ workloads }}</td></tr>
+<tr><th>platform images</th><td>
+  {% if images.is_empty() %}<span class="subtle">none installed</span>{% else %}
+  {% for i in images %}<code>{{ i }}</code>{% if !loop.last %} {% endif %}{% endfor %}
+  {% endif %}
+</td></tr>
+</table>
+<p class="subtle">Stage 1 (E-28): fleet of one — the console-host runs on the
+node it reports. The admin plane (P1) replaces this page with the real fleet
+registry: host states, groups, version + attestation, allocations.</p>
+{% endblock %}

@@ -13,7 +13,9 @@ new **PublicIpv4** object, family-agnostic rule ranges.
 `GetUsage`/`GetConsole`/`GetEvents` enumerated (FR-2/FR-6/FR-40/FR-42 — existing scope,
 newly named); **Allocation merged into Host** (allocate = create, release = delete — the
 binding is Host state, FR-13); cuts → P2 register: `Vpc.subnets`, VPC subrange update,
-`Image` re-tag.
+`Image` re-tag. **v8 (E-28, 2026-10-19)**: **console surfaces (MVP)** — the UIs as
+pure projections of the frozen map; page inventories for both consoles + Stage-1
+demo scope.
 
 Transport: HTTPS REST + gRPC mirror; AuthN per SEC-20 (short-lived tokens, rotation);
 every call audit-logged (SEC-23). Scope: every object and attribute is visible only to its
@@ -189,3 +191,50 @@ subrange update, `Image` re-tag.
   explainability rule (doc 05 §2) applies to the API surface itself.
 - Deletion semantics: workload/volume deletes are **operations** (teardown with reported
   wipe), not just row deletion — the audit trail outlives the object.
+
+## Console surfaces (MVP) — E-28
+
+**Rule**: a console is a **projection of this API — it may do nothing that is not
+a method above** (the E-21 freeze binds the UIs exactly as it binds SDKs).
+Attribute visibility rides the same per-projection rule (FR-14/SEC-16): the
+tenant UI shows what the tenant reads see — never fleet internals.
+
+Two consoles, two authN domains (E-8/FR-40 — same as the API): the **user
+console** (tenant plane) and the **admin console** (admin plane). One web service
+hosts both (the **console-host**, `porche-web` — doc 12 §9); the split is
+enforced at the adapter, not in the UI.
+
+### User console (tenant plane) — page inventory
+
+| Page | Reads | Mutations |
+|---|---|---|
+| Workloads (home) | `Get`/`List`: state, **placement reason** (why pending — the explainability rule), ip6, public v4, image digest, vcpu/ram | `CreateWorkload` (form), `StopWorkload`, `DeleteWorkload` |
+| Workload detail | spec + `GetConsole` (live stream + recorded log — tab), `GetEvents` (tab), attached volumes/rules | `MigrateWorkload` (P1 button — FR-34) |
+| Volumes | `Get`/`List`: size, tier, attached-to | `CreateVolume`, `DeleteVolume` (**renders the wipe report** — deletion is an operation), `SyncVolume`, checkpoint retention |
+| Network | Vpc, IngressRule/EgressRule/SecurityGroup lists, PublicIpv4 attachments | create/revoke rules, `UpdateSecurityGroupRules`, `AttachPublicIpv4`/`DetachPublicIpv4` (E-24) |
+| Usage | `GetUsage`: per workload + summary (FR-40; showback-ready FR-42) | — |
+| Tokens | own tokens | `CreateToken`, `RevokeToken` |
+
+### Admin console (admin plane) — page inventory
+
+| Page | Shows | Mutations |
+|---|---|---|
+| Fleet (home) | host states, groups, profiles, load, **version + attestation**, allocations | host onboard/offboard/state (drain, reimage) |
+| Host detail | metrics, per-host event stream (the audit trail lives here — SEC-23) | — |
+| HostGroups | capacity per group | HostGroup CRUD |
+| Quotas | tenant quota matrix | `UpdateQuota` |
+| Users | admin identity list | User CRUD |
+| Images & versions | version registry, deploy-gate states | image-pipeline triggers, gate promote/hold (doc 12 §3) |
+| PublicIpv4 pool | pool state | create/delete |
+| Audit | every mutating call: actor, object, time (the E-26 convention as a page) | — |
+
+**MVP cuts (P2)**: image import UI (`ImportImage` stays CLI-first), tenant-side
+quota editing (read-only), migration UX, billing detail, SSO (authN domains are
+token-based until the planes land).
+
+**Stage 1 (PoC demo — doc 07 §8)**: `porche-web` runs the user surface
+(workloads, console tab, wipe report) and a single-host admin surface (fleet of
+one, audit) over the **PoC adapter** — the desired-state store + host-agent
+verbs, with method names shaped like this map. The P1 adapter swaps the backend
+to the real planes; the UIs do not change. Mutations serialize through one
+executor lock (I-12 reconciliation replaces this).

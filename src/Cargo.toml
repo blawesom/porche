@@ -4,6 +4,7 @@ members = [
     "crates/porche-core",
     "crates/porche-clh",
     "crates/porche-host",
+    "crates/porche-web",
 ]
 
 [workspace.package]

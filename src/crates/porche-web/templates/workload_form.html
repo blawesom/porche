@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Create workload</h1>
+{% match error %}
+{% when Some with (e) %}
+<div class="banner err-banner"><strong>rejected:</strong> {{ e }}</div>
+{% when None %}
+{% endmatch %}
+<form method="post" action="/w/new">
+  <label>id
+    <input name="id" value="{{ form.id }}" required pattern="[a-z0-9-]+" title="lowercase letters, digits, dashes">
+  </label>
+    <label>image digest — platform images installed under the data dir
+    {% if image_digests.is_empty() %}
+    <input name="image_digest" value="{{ form.image_digest }}" required placeholder="sha256:…">
+    {% else %}
+    <select name="image_digest">
+      {% for pair in image_digests %}
+      <option value="{{ pair.0 }}" {% if pair.1 %}selected{% endif %}>{{ pair.0 }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+  </label>
+  <label>command — shell string; the guest runs it after porche.ready
+    <input name="command" value="{{ form.command }}" required>
+  </label>
+  <label>vcpu
+    <input name="vcpu" value="{{ form.vcpu }}" required>
+  </label>
+  <label>ram (MiB)
+    <input name="ram_mib" value="{{ form.ram_mib }}" required>
+  </label>
+  <label>volume (MiB, empty = volume-less workload)
+    <input name="volume_mib" value="{{ form.volume_mib }}">
+  </label>
+  <label>ip6 — the workload /128 (E-22)
+    <input name="ip6" value="{{ form.ip6 }}" required>
+  </label>
+  <label>gw6 — the gateway the guest gets on the cmdline (E-25)
+    <input name="gw6" value="{{ form.gw6 }}" required>
+  </label>
+  <button type="submit">create</button>
+</form>
+{% endblock %}

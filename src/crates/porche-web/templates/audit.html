@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Audit</h1>
+<p class="subtle">Every mutation through the console = one entry (the E-26
+convention). Stage 1 keeps this beside the desired-state store; the planes (P1)
+write the same entries via SEC-23.</p>
+{% if rows.is_empty() %}
+<p class="subtle">No entries yet.</p>
+{% else %}
+<table>
+<tr><th>time</th><th>actor</th><th>action</th><th>object</th><th>result</th></tr>
+{% for r in rows %}
+<tr>
+  <td class="subtle">{{ r.ts }}</td>
+  <td>{{ r.actor }}</td>
+  <td>{{ r.action }}</td>
+  <td>{{ r.object }}</td>
+  <td class="{% if r.result.starts_with("ok") %}ok{% else %}err{% endif %}">{{ r.result }}</td>
+</tr>
+{% endfor %}
+</table>
+{% endif %}
+{% endblock %}

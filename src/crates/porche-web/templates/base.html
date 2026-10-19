@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PORCHE console</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; margin: 0; }
+  nav { display: flex; gap: 1.1rem; padding: .6rem 1rem; border-bottom: 1px solid #8884; align-items: baseline; }
+  nav a { text-decoration: none; }
+  .mode { margin-left: auto; font-size: .8rem; opacity: .7; }
+  main { padding: 1rem; max-width: 72rem; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: .35rem .6rem; border-bottom: 1px solid #8883; font-size: .92rem; vertical-align: top; }
+  th { opacity: .7; font-weight: 600; }
+  .ok { color: #1a7f37; } .warn { color: #9a6700; } .err { color: #cf222e; }
+  pre { background: #8881; padding: .6rem; overflow-x: auto; font-size: .85rem; }
+  form label { display: block; margin-top: .7rem; font-size: .85rem; }
+  form input, form select { padding: .3rem; width: 100%; max-width: 34rem; box-sizing: border-box; }
+  button { margin-top: 1rem; padding: .4rem 1rem; cursor: pointer; }
+  form.inline { display: inline; }
+  form.inline button { margin: 0; padding: .1rem .6rem; }
+  .banner { padding: .5rem .8rem; border: 1px solid; margin-bottom: 1rem; }
+  .err-banner { border-color: #cf222e; color: #cf222e; }
+  .ok-banner { border-color: #1a7f37; color: #1a7f37; }
+  .subtle { opacity: .65; font-size: .82rem; }
+  code { background: #8882; padding: 0 .3rem; }
+</style>
+<script src="/htmx.js"></script>
+</head>
+<body>
+<nav>
+  <strong>PORCHE</strong>
+  <a href="/w">workloads</a>
+  <a href="/a">fleet</a>
+  <a href="/a/audit">audit</a>
+  <span class="mode">{{ mode }} · porche-web {{ version }}</span>
+</nav>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>DeleteWorkload — wipe report</h1>
+<p><strong>{{ id }}</strong> is deleted. Deletion is an operation (doc 09
+conventions): teardown with a reported wipe — the audit trail outlives the
+object. All five probes must pass or the row would still exist:</p>
+<table>
+<tr><th>probe</th><th>result</th></tr>
+<tr><td>mapper_absent</td><td class="{% if mapper_absent %}ok{% else %}err{% endif %}">{% if mapper_absent %}✓ pass{% else %}✗ FAIL{% endif %}</td></tr>
+<tr><td>keyfile_entry_removed</td><td class="{% if keyfile_entry_removed %}ok{% else %}err{% endif %}">{% if keyfile_entry_removed %}✓ pass{% else %}✗ FAIL{% endif %}</td></tr>
+<tr><td>keyslots_erased</td><td class="{% if keyslots_erased %}ok{% else %}err{% endif %}">{% if keyslots_erased %}✓ pass{% else %}✗ FAIL{% endif %}</td></tr>
+<tr><td>region_trimmed</td><td class="{% if region_trimmed %}ok{% else %}err{% endif %}">{% if region_trimmed %}✓ pass{% else %}✗ FAIL{% endif %}</td></tr>
+<tr><td>region_clean</td><td class="{% if region_clean %}ok{% else %}err{% endif %}">{% if region_clean %}✓ pass{% else %}✗ FAIL{% endif %}</td></tr>
+</table>
+<p><a href="/w">← workloads</a></p>
+{% endblock %}

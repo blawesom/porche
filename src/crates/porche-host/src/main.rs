@@ -2,13 +2,9 @@
 //! implements the **host-agent** role only (doc 07 §2): four verbs over the local
 //! desired-state table, shaped for reconciliation (I-12).
 
-mod cmdspec;
-mod exec;
-mod netns;
-mod volume;
-
 use clap::{Parser, Subcommand};
-use exec::{DirectExecutor, Runner};
+use porche_host::exec::{DirectExecutor, Runner};
+use porche_host::volume;
 use porche_core::{ops, DesiredStateStore, SqliteStore, WorkloadSpec};
 use std::path::PathBuf;
 use std::process::ExitCode;
