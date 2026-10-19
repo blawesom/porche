@@ -143,8 +143,9 @@ boundary** — the two seams this design preserves on purpose.
 
 - [ ] KMS API surface (wrap/unwrap, migration lease extension, token minting) — spec
       before P1.
-- [ ] Desired-state table on the host (SQLite vs file-based) — decide with the PoC
-      host-agent (doc 07 open point).
+- [x] Desired-state table on the host — **SQLite** (rusqlite, WAL), decided with the
+      PoC host-agent build (doc 07 §8.4, E-27): verbs are table writers; the P0 control
+      plane replaces the CLI writer, not the agent (I-12).
 - [ ] Metering aggregation cadence from the event table (FR-42 precision vs load).
 - [ ] Admin-plane monitoring ingestion (metrics ride the admin channel — volume and
       retention to size).

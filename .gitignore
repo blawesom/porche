@@ -1,0 +1,6 @@
+# Rust build artifacts
+/src/target/
+
+# local scratch
+*.swp
+*.log

@@ -1,6 +1,6 @@
 # 07 — PoC Scope (pre-P0)
 
-Working document — v8, 2026-10-18. **v2**: live migration explicitly deferred (v1 goal,
+Working document — v9, 2026-10-19. **v2**: live migration explicitly deferred (v1 goal,
 not PoC scope — E-3). **v3 (E-4)**: PoC re-targeted to **direct Cloud Hypervisor
 orchestration** — no containerd, no Kata. **v4 (E-5)**: PoC host = **Fedora CoreOS,
 stable stream** — the tracked upstream. **v5 (E-6/E-7)**: wipe = crypto-erase only;
@@ -12,9 +12,12 @@ baseline **delta**; create takes platform images only. **v7 (E-22/E-25)**: the g
 stay deferred. **v8 (test plan + sequencing)**: §7 concretizes the test plan — methods,
 samples, thresholds, wipe probe, baseline toggles, results template; the harness develops
 on node 1's Rocky interim, the recorded PoC runs on the FCOS OMI (E-5 unchanged —
-sequencing, not scope). Defines the **first proof of concept**: the smallest
-buildable system that validates the riskiest technical bets of the design. Everything not
-listed in scope is **deferred by decision**, not forgotten — see §3.
+sequencing, not scope). **v9 (implementation plan, 2026-10-19)**: §7.4 escape artifact
+policy decided (**hybrid**); §8 opened — repository layout (E-27), workstreams
+WS-A..WS-F, burst-mode sequencing, ratified defaults (§8.4). Defines the **first proof of
+concept**: the smallest buildable system that validates the riskiest technical bets of
+the design. Everything not listed in scope is **deferred by decision**, not forgotten —
+see §3.
 
 **Scope rule**: a feature enters the PoC only by evicting another one. If it is not needed
 to answer the §1 questions, it is out.
@@ -182,10 +185,9 @@ Rocky 9 interim; the **recorded PoC run** is on the **FCOS stable OMI** once imp
 - Delta verdicts are *control* claims, never security-evidence claims (E-16/E-18) —
   security evidence is metal-only.
 
-**Open point — escape artifact policy** (operator decision pending): real public PoCs
-per class vs synthetic surface exercises vs hybrid (synthetic for the delta controls +
-real PoCs where safely reproducible; full artifacts in the metal run / SEC-40). Hybrid
-is the working proposal.
+**Decided (operator, 2026-10-19): hybrid.** Synthetic surface exercises carry the delta
+controls (every run); real public PoCs run only where safely reproducible inside our node
+VMs' guests; full real-PoC artifacts move to the metal run / SEC-40.
 
 ### 7.5 Results record (the PoC exit artifact)
 
@@ -201,3 +203,69 @@ is the working proposal.
 
 The filled table plus the §7.1 fixture record is committed with the run; the PoC is done
 when the table is green — or a §6 kill criterion fired.
+
+---
+
+## 8. Implementation plan (opened with the build, 2026-10-19)
+
+The working plan the implementation follows; §1–§7 remain the contract. Status lives in
+§8.5 and is updated as workstreams complete.
+
+### 8.1 Repository layout (E-27)
+
+| Tree | Role | First content |
+|---|---|---|
+| `doc/` | the corpus (moved 2026-10-19; doc numbers are stable IDs, unchanged) | — |
+| `src/` | Rust workspace, **one binary role-selected at startup** (I-13): `porche-core` (types + desired-state store + verb orchestration), `porche-clh` (CLH API client), `porche-host` (`porche host-agent` — the PoC CLI) | WS-C |
+| `guest/` | guest image build (action 11): pinned kernel + initramfs + BusyBox rootfs + platform init; artifacts digest-pinned at fetch | WS-B |
+| `harness/` | the §7 test harness (scripted) | WS-D |
+| `infra/` | integration environment IaC (doc 13) — unchanged | — |
+| `runs/` | recorded run artifacts; the filled §7.5 table is committed with its run | WS-F |
+
+Growth rules (README) govern `doc/` only; code-tree layout is build tooling.
+
+### 8.2 Workstreams
+
+| # | Workstream | Deliverable | Acceptance (§7.5 row) |
+|---|---|---|---|
+| WS-A | Host baseline — node 1, **burst** | `make up`; SEC-11 sysctl script applied + asserted; `brporche` + isolated-port config; fixture capture (§7.1) | sysctl script |
+| WS-B | Guest image (action 11) | `guest/` build: pinned kernel + rootfs; init applies `porche.ip6=`, prints `porche.ready` | PERF-1 anchor; guest digests (§7.1) |
+| WS-C | host-agent — the only new code; **test-first** | `porche host-agent` create/status/stop/wipe over the desired-state store; CLH client; LUKS2 + crypto-erase wipe; per-VM netns | the code under every §7.5 test |
+| WS-D | Harness | §7.2 methods scripted: boot timing, density, 1,000× loop, drift, wedge, wipe probe | all rows |
+| WS-E | Escape delta (hybrid, §7.4) | 3 classes × hardened/baseline toggles (§7.3), inside our guests only (§7.4 safety rules) | escape delta |
+| WS-F | Recorded run | FCOS stable OMI (doc 13 §8) → full §7 suite → §7.5 filled + fixtures committed | exit |
+
+### 8.3 Sequencing (burst mode — cost rule, doc 13 §7)
+
+Node 1 runs only for integration bursts (`make up` at burst start, `make down` at end;
+dedicated servers are billed while group VMs run). Development that does not need the
+node happens locally.
+
+| Week | Work |
+|---|---|
+| 1 | restructure (done) + WS-A + WS-B (guest build is local) |
+| 2–3 | WS-C on node 1 in bursts: CLH/netns/volume integration; store + verb orchestration + CLH client are test-first offline |
+| 4 | WS-D harness (interim Rocky 9 is acceptable, §7.1) + WS-E delta exercises |
+| 5 | WS-F: FCOS OMI, recorded run, results |
+
+### 8.4 Ratified defaults (operator, 2026-10-19)
+
+| Point | Decision | Note |
+|---|---|---|
+| Desired-state store | **SQLite** (rusqlite, WAL) | closes doc 12 §8 open point; verbs are table writers — the P0 control plane replaces the CLI writer, not the agent (I-12) |
+| Guest init | POSIX sh on BusyBox | platform init per E-25; `porche.ready` = the PERF-1 T1 marker |
+| Harness language | bash (+ jq/python3 for stats) | CI-tooling class, not the trust path (doc 12 §4 allows) |
+| Core runtime | sync-first PoC core; tokio/tonic arrive with the P0 long-running agent | the reconcile shape that must survive is store + verbs, not the async runtime |
+| Escape artifacts | hybrid (§7.4) | synthetic deltas every run; real PoCs only where safely reproducible |
+
+### 8.5 Status
+
+| Workstream | State |
+|---|---|
+| repo restructure (E-27) | done 2026-10-19 |
+| WS-A | **not started — needs operator `make up` (billing)** |
+| WS-B | scaffolded (`guest/` build scripts; kernel pin recorded at first fetch) |
+| WS-C | scaffolded (`src/` workspace: types, store, verb orchestration, CLH client skeleton; unit tests offline; on-node integration pending WS-A) |
+| WS-D | scaffolded (`harness/` scripts) |
+| WS-E | not started (after WS-C) |
+| WS-F | not started (after WS-A..WS-E) |
