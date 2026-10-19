@@ -1,80 +1,59 @@
 # PORCHE — Portable Cloud Orchestrator
 
-In-house cloud orchestrator: **bare metal**, first-in-class performance, security by design.
+In-house cloud orchestrator: **bare metal**, first-in-class performance, security by
+design.
 
-**Base**: a **new orchestrator**, built from scratch. Its design starts from the
-incumbent production platform's design (reference only, doc 06 §4) and improves it —
-**Cloud Hypervisor directly orchestrated as the single VM runtime (E-4: no Kata, no
-containerd)**, default block encryption, tiered storage
-durability, dedicated hosts. Software architecture and languages: later spec. **This corpus is self-contained**: every fact the design
-documents rely on (research findings, vulnerability history, the incumbent base design, the
-stack decision) is recorded in doc 06. No external repository is needed to read or extend
-the design.
+## Objectives
 
-## Philosophy
-
-- **Bare metal first**: we own the hardware; no legacy virtualization layer between the
-  orchestrator and the metal.
-- **Security by design, not by patching**: every security requirement is traceable to a
-  real-world lesson (2026 incumbent-platform isolation assessment, 2021–2026 CVE corpus —
-  doc 06).
+- **Own the metal**: bare-metal hosts, one user per host — no legacy virtualization
+  layer between the orchestrator and the hardware.
 - **Untrusted workloads by default**: the reference adversary is the workload itself
-  (compromised AI agent, malicious build).
-- **Measurable performance**: quantified SLOs, validated by a test plan — not adjectives.
+  (compromised AI agent, malicious build) — every design decision starts there.
+- **Disposable by construction**: a workload is a microVM (Cloud Hypervisor directly
+  orchestrated — no Kata, no containerd) with encrypted local storage and a
+  deterministic teardown: kill → unmap → wipe (crypto-erase), no residue, no wedge.
+- **Security by design, not by patching**: every security requirement traces to a
+  real-world lesson (2026 incumbent-platform isolation assessment, 2021–2026 CVE
+  corpus — doc 06); hardening is validated by an escape suite, not assumed.
+- **Measurable performance**: quantified SLOs (PERF-1..13) with test plans and
+  thresholds — not adjectives.
+- **Boring where it doesn't matter**: battle-tested components in the trust path,
+  one language, one audited codebase.
 
-## Structure and growth rules
+## Core requirements (the essentials)
 
-The repository is the documentation corpus (`doc/`) plus the implementation trees
-(layout decision: E-27):
-
-| Tree | Role |
+| Class | The contract |
 |---|---|
-| `doc/spec/` | the contract (normative) — 01 requirements · 09 API + tenant surface map · 11 glossary |
-| `doc/design/` | how it works (informative) — 02 architecture · 04 storage tiers · 05 dedicated hosts · 12 software · 14 networking |
-| `doc/decisions/` | why — evidence + chronology — 03 simplification (merged into doc 08 §F — stub) · 06 design basis · 08 review + E-register |
-| `doc/operations/` | build & run (procedures) — 07 PoC · 10 upgrade & migration · 13 integration environment |
-| `src/` | Rust workspace, one binary role-selected at startup (doc 12 §3) — the host-agent (doc 07 §2) is the PoC's only new code |
-| `guest/` | guest image build: pinned kernel + initramfs + rootfs + platform init (doc 08 action 11) |
-| `harness/` | the PoC test harness (doc 07 §7) |
-| `infra/` | integration environment IaC (doc 13) |
-| `runs/` | recorded run artifacts — the filled §7.5 table is committed with its run (doc 07 §7.5) |
+| Workload lifecycle | create from platform images only (controlled rebuild — nothing tenant-supplied runs as supplied); deterministic teardown (FR-3) |
+| Isolation | one microVM per workload, frozen device model, kernel hardening (SEC-11), per-workload netns — no shared L2, no VLAN trust |
+| Storage | tiers: encrypted local NVMe write-back (E), async epoch sync (R), archival (S); wipe = crypto-erase only (E-6) |
+| Networking | IPv6-first: one /128 per workload from the VPC ULA; egress/ingress proxies are the sole enforcement points; no BGP in v1 |
+| Control plane | three planes (admin / tenant / KMS shared trust anchor); hosts own reality — unbounded autonomy on partition; orders are rows, no message bus in v1 |
+| Operations | A/B reimaging, canary rings, platform maintenance never terminates stateful workloads |
 
-Rules:
+Full requirements (FR / SEC / PERF / OPS + traceability): doc 01.
 
-- **Doc numbers are stable IDs.** The corpus cites itself as `doc NN §X` (255+ references);
-  the number resolves to the document wherever it lives — `doc 14 §3` means the section
-  `§3` of doc 14, in `doc/design/14-workload-networking.md`.
-- **New topic → a new section inside an existing document.** A new corpus file is itself a
-  scope change and requires a row in the E-register (doc 08 §E); the corpus directory set
-  under `doc/` is frozen.
-- The growth rules govern `doc/` only — code-tree layout is build tooling, not corpus
-  scope (E-27).
-- `doc/archive/` holds superseded originals; nothing normative lives there.
+## Start here (read order)
 
-## Document index
+1. **[doc 06 — design basis](doc/decisions/06-design-basis.md)** — why these
+   choices: isolation landscape, vulnerability history, the stack decision
+2. **[doc 01 — requirements](doc/spec/01-requirements.md)** — the contract
+3. **[doc 02 — architecture](doc/design/02-architecture.md)** — how the system
+   works
 
-| # | Document | Role |
-|---|----------|------|
-| 01 | [requirements](doc/spec/01-requirements.md) | Requirements specification (FR / SEC / PERF / OPS) + traceability |
-| 02 | [architecture](doc/design/02-architecture.md) | Core architecture (new build, incumbent design as reference): layers, improvement register |
-| 03 | [simplification](doc/decisions/03-simplification.md) | **Merged into doc 08 §F** — pointer stub (`doc 03 §N` = `doc 08 §F.N`) |
-| 04 | [storage tiers](doc/design/04-storage-tiers.md) | Local NVMe write-back + async epoch sync; checkpoint ("snapshot") semantics, consistency, economics |
-| 05 | [dedicated hosts](doc/design/05-dedicated-hosts.md) | One user per bare metal host; placement views; attract/repulse resiliency model |
-| 06 | [design basis](doc/decisions/06-design-basis.md) | Self-contained research record: isolation landscape, CVE history, assessment findings (F-register), incumbent design, stack decision |
-| 07 | [PoC scope](doc/operations/07-poc.md) | First proof of concept: minimal scope, explicit deferrals, kill criteria |
-| 08 | [challenges](doc/decisions/08-challenges.md) | Design review: challenged decisions, contradictions, objective gaps, action list + scope-change register (E) + §F superseded rationale (was doc 03) |
-| 09 | [API](doc/spec/09-api.md) | Object catalog + frozen tenant surface map: Host (allocate/release), Workload, Volume, Checkpoint, network rules, PublicIpv4, Image, … |
-| 10 | [upgrade & migration](doc/operations/10-upgrade-migration.md) | Operator runbook: host image/A-B reimage, canary rings, workload migration mechanics, failure handling |
-| 11 | [glossary](doc/spec/11-glossary.md) | Controlled-language contract: one word one meaning, RFC 2119 keywords, procedure writing rules |
-| 12 | [software architecture](doc/design/12-software-architecture.md) | Control-plane and host-side software: state authority, order flow (no bus in v1), three services, Rust/tonic/sqlx, Postgres HA |
-| 13 | [integration environment](doc/operations/13-integration-environment.md) | The "proper infra" simulated on Outscale cloud: topology, fidelity contract, provisioning recipe, operations |
-| 14 | [workload networking](doc/design/14-workload-networking.md) | Workload data path: IPv6-first (routed /128, ULA per VPC), netns/isolated-bridge, egress/ingress proxies, enforcement rules, threat-model walkthrough |
+Then: doc 07 (PoC scope) · doc 08 (design review + E-register) · doc 12 (software
+architecture) · doc 14 (workload networking). Full set: docs 01–14 live under
+`doc/{spec,design,decisions,operations}/` — doc numbers are stable IDs
+(`doc 14 §3` = §3 of `doc/design/14-workload-networking.md`); new topics land as
+sections of existing documents, a new corpus file needs an E-register row (doc 08 §E).
 
-Read order for a new session: **06 → 01 → 02**, then 03/04/05/07/08 as needed; the
-software architecture is **12** (after 02).
+## Repository layout
 
-## Archive
-
-`doc/archive/` holds the French-language working originals of the research phase
-(isolation comparison, vulnerability history, recommended stack) — superseded by the
-English digests in doc 06, kept for historical reference only.
+| Tree | Content |
+|---|---|
+| `doc/` | the corpus — spec/ (normative) · design/ (informative) · decisions/ (why) · operations/ (procedures) |
+| `src/` | Rust workspace — one binary, role-selected at startup; the host-agent is the PoC role |
+| `guest/` | guest platform image build: pinned kernel + BusyBox + platform init |
+| `harness/` | PoC test harness (doc 07 §7) |
+| `infra/` | integration environment IaC (Outscale — doc 13) |
+| `runs/` | recorded run artifacts + the filled §7.5 results table |
