@@ -48,6 +48,24 @@ impl CommandSpec {
             ))
         }
     }
+
+    /// Execute; capture stdout (for existence checks).
+    pub fn run_output(&self) -> Result<String, String> {
+        let output = Command::new(&self.argv[0])
+            .args(&self.argv[1..])
+            .output()
+            .map_err(|e| format!("spawn {}: {e}", self.argv[0]))?;
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+        } else {
+            Err(format!(
+                "{}: exit {:?}: {}",
+                self.display(),
+                output.status.code(),
+                String::from_utf8_lossy(&output.stderr).trim()
+            ))
+        }
+    }
 }
 
 #[cfg(test)]

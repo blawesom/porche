@@ -94,6 +94,13 @@ impl DirectExecutor {
     }
 }
 
+/// The CLH binary — absolute path: `ip netns exec` resolves via execvp under the
+/// spawning user's PATH, and root's secure_path does not include /usr/local/bin
+/// (observed on Rocky 9 — the child dies instantly, the socket never appears).
+fn clh_binary() -> String {
+    std::env::var("PORCHE_CLH_BIN").unwrap_or_else(|_| "/usr/local/bin/cloud-hypervisor".into())
+}
+
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -216,9 +223,11 @@ impl Executor for DirectExecutor {
         }
 
         // The VMM runs jailed inside the workload netns (doc 14 §2: process boundary
-        // and network boundary coincide).
+        // and network boundary coincide). Absolute binary path — see clh_binary().
         let child = Command::new("ip")
-            .args(["netns", "exec", &ns, "cloud-hypervisor", "--api-socket"])
+            .args(["netns", "exec", &ns])
+            .arg(clh_binary())
+            .arg("--api-socket")
             .arg(&sock)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -312,9 +321,21 @@ impl Executor for DirectExecutor {
                 .map_err(ExecuteError::Teardown)?;
         }
 
-        // 5. netns removal — a failure here is wedge-class, not a probe miss
-        for c in netns::remove_commands(id) {
-            self.run(&c).map_err(ExecuteError::Teardown)?;
+        // 5. netns removal — absence is the desired state (idempotent; a create
+        //    that failed before the netns existed must not fail its rollback)
+        if self.runner == Runner::Shell {
+            let listing = CommandSpec::new(&["ip", "netns", "list"])
+                .run_output()
+                .unwrap_or_default();
+            if listing.lines().any(|l| l.starts_with(&netns::ns_name(id))) {
+                for c in netns::remove_commands(id) {
+                    self.run(&c).map_err(ExecuteError::Teardown)?;
+                }
+            }
+        } else {
+            for c in netns::remove_commands(id) {
+                self.run(&c).map_err(ExecuteError::Teardown)?;
+            }
         }
         Ok(report)
     }

@@ -25,7 +25,7 @@ echo "== CLH v54.0 =="
 echo "$CLH_SHA256  $B/cloud-hypervisor-static" | sha256sum -c - \
     || { echo "CLH DIGEST MISMATCH — stop"; exit 1; }
 install -m 0755 "$B/cloud-hypervisor-static" /usr/local/bin/cloud-hypervisor
-cloud-hypervisor --version
+/usr/local/bin/cloud-hypervisor --version
 
 echo "== nested virt sanity =="
 grep -q vmx /proc/cpuinfo || { echo "no vmx flag"; exit 1; }
@@ -40,24 +40,47 @@ mkdir -p "$DATA_DIR/images/$DIGEST" "$DATA_DIR/volumes" "$DATA_DIR/consoles" "$D
 install -m 0644 "$B/kernel"    "$DATA_DIR/images/$DIGEST/kernel"
 install -m 0644 "$B/initramfs" "$DATA_DIR/images/$DIGEST/initramfs"
 
-echo "== /dev/vdb: the NVMe region (tier-E volume backing) =="
-if ! blkid /dev/vdb > /dev/null 2>&1; then
-    mkfs.ext4 -q -L porche-nvme /dev/vdb
+echo "== NVMe region (tier-E volume backing): the second BSU =="
+# Outscale maps the linked BSU to a SCSI device (observed: /dev/sdb link → /dev/sda
+# inside the VM; device naming is platform-mapped, so find the non-root 200G disk)
+REGION_DEV=$(lsblk -dn -o NAME,SIZE,TYPE | awk '$3=="disk" && $2=="200G" {print $1; exit}')
+[ -n "$REGION_DEV" ] || { echo "could not find the 200G region disk"; lsblk; exit 1; }
+REGION_DEV="/dev/$REGION_DEV"
+echo "region disk: $REGION_DEV"
+if ! blkid "$REGION_DEV" > /dev/null 2>&1; then
+    mkfs.ext4 -q -L porche-nvme "$REGION_DEV"
 fi
 mkdir -p "$DATA_DIR"
 if ! mountpoint -q "$DATA_DIR"; then
     # discard: fallocate --dig → ext4 freed extents → TRIM to the BSU (E-6)
-    mount -o discard /dev/vdb "$DATA_DIR"
+    mount -o discard LABEL=porche-nvme "$DATA_DIR"
     grep -q "porche-nvme" /etc/fstab || \
         echo "LABEL=porche-nvme $DATA_DIR ext4 discard 0 2" >> /etc/fstab
 fi
 
-echo "== module warm-up (before modules_disabled=1) =="
-# pull in veth/nf_tables now: the agent must not fail on a sealed kernel
+echo "== packages + module warm-up (before modules_disabled=1) =="
+# the minimal Rocky OMI ships no nft/cryptsetup userspace; the seal is
+# irreversible, so every module the agent needs is loaded AND VERIFIED here
+# (modprobe with multiple names silently loads only the first — observed
+# 2026-10-19; /sys/module catches built-ins too, unlike lsmod)
+command -v nft > /dev/null 2>&1 || dnf install -y -q nftables
+command -v cryptsetup > /dev/null 2>&1 || dnf install -y -q cryptsetup
+command -v nft > /dev/null 2>&1 || { echo "FATAL: nft unusable"; exit 1; }
+command -v cryptsetup > /dev/null 2>&1 || { echo "FATAL: cryptsetup unusable"; exit 1; }
+for m in bridge veth nf_tables dm_mod dm_crypt loop; do
+    modprobe "$m" 2>/dev/null || true
+done
+for m in bridge veth nf_tables dm_mod dm_crypt loop; do
+    [ -d "/sys/module/$m" ] || { echo "FATAL: kernel module $m not present — refusing to seal"; exit 1; }
+done
+# exercise them for real: veth pair + nft table + the workload bridge
 ip link add porche-warmup type veth peer name porche-warmup2 2>/dev/null || true
 ip link del porche-warmup 2>/dev/null || true
-nft add table inet porche_warmup 2>/dev/null || true
+nft add table inet porche_warmup || { echo "FATAL: nft unusable — refusing to seal"; exit 1; }
 nft delete table inet porche_warmup 2>/dev/null || true
+ip link show brporche > /dev/null 2>&1 || ip link add brporche type bridge
+ip link set brporche up
+ip link show brporche > /dev/null || { echo "FATAL: brporche unusable"; exit 1; }
 
 echo "== SEC-11 sysctl subset (doc 07 §7.2) =="
 # -e: unknown keys tolerated (interim Rocky 5.14 may lack io_uring_disabled —
@@ -81,7 +104,7 @@ for s in loop density perf1; do
         density) ID=d0;    VOL=128;;
         perf1)   ID=p1;    VOL=128;;
     esac
-    jq --arg id "$ID" --arg d "$DIGEST" --argjson v "$VOL" \
+    jq -n --arg id "$ID" --arg d "$DIGEST" --argjson v "$VOL" \
        '{id:$id, image_digest:$d, command:"echo alive > /dev/console",
          vcpu:1, ram_mib:128, volume:{size_mib:$v}, ip6:"'$IP6'", gw6:"'$GW'"}' \
        > /root/poc/spec-$s.json

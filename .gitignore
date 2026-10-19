@@ -9,3 +9,4 @@
 guest/dl/
 guest/out/
 infra/integration/tfplan-bsu
+infra/integration/tfplan-links
