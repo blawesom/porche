@@ -37,7 +37,7 @@ First-in-class performance and security, by design.
 escape, neighbor attacks, and control-plane bypass. Secondary adversary: the curious legitimate
 tenant (platform enumeration, fingerprinting).
 
-**Traceability sources** (all in doc 06 — this directory is self-contained):
+**Traceability sources** (all in doc 06 — this corpus is self-contained):
 - `[R-xx]` = finding from the incumbent-platform assessment — F-register, doc 06 §3
 - `[C-yy]` = CVE / cluster from the vulnerability corpus — doc 06 §2
 - `[D-yy]` = decision from the stack study — doc 06 §5

@@ -288,7 +288,9 @@ authorized for P0/P1).
 ## E. Scope-change register (operator decisions)
 
 Rule (E-21): the v1 API surface is **frozen at E-14** — a new v1 object, field, or plane
-must evict equivalent scope; additions queue in the P2 register.
+must evict equivalent scope; additions queue in the P2 register. A **new corpus file**
+is itself a scope change and requires a row here; new topics land as sections of
+existing documents.
 
 | # | Date | Decision | Applied in |
 |---|------|----------|-----------|

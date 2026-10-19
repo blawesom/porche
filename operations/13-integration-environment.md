@@ -173,7 +173,7 @@ sysctls is the acceptable interim.
 ## 8. Open items
 
 - [x] Provision second BSUs + host SGs (`hostcp`/`hostshard`) + public IPs (2026-10-18,
-      via `infra/integration/`).
+      via the repository's `infra/integration/`).
 - [ ] Provision metal node 2 (created 2026-10-18, **terminated the same day** — recreate
       per §5; reconcile the local TF state first: it still records the terminated VM).
 - [ ] Provision the NFS VM + control-plane VM (§5) — SGs and public IPs exist; VM

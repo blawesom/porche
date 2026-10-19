@@ -7,7 +7,7 @@ isolation assessment (findings F0–F45), the legacy base design, and the stack
 decision. **v2**: vocabulary sweep only (GPU phase prose → P2, doc 08 E-16..E-21 pass).
 **This directory is self-contained**: no external repository is required to read
 or extend the PORCHE design docs. (French-language working originals of the research phase
-are kept in `archive/`.)
+are kept in `archive/` at the repository root.)
 
 Traceability tags used across docs 01–05:
 - `[R-xx]` = finding from the incumbent-platform assessment → §3 below
