@@ -4,3 +4,8 @@
 # local scratch
 *.swp
 *.log
+
+# guest build artifacts
+guest/dl/
+guest/out/
+infra/integration/tfplan-bsu

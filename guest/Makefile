@@ -22,22 +22,21 @@ fetch: $(DL)/$(KVER).tar.xz $(DL)/$(BVER).tar.bz2
 define download
 $(DL)/$(2):
 	@mkdir -p $(DL)
-	@test -n "$(4)" || { \
-	  if [ "$(record)" = "1" ]; then \
-	    echo "FETCH (unpinned, recording): $(1) $(2)"; \
-	    curl -fL -o $$@ $(1)/$(2); \
-	    sha=$$$$(sha256sum $$@ | cut -d' ' -f1); \
-	    sed -i "s|^$(3) :=.*|$(3) := $$$$sha|" versions.env; \
-	    echo "recorded $(3) := $$$$sha — REVIEW THE DOWNLOAD SOURCE, then commit"; \
-	  else \
-	    echo "REFUSED: $(3) is not pinned — run 'make $(5) record=1' to fetch+record, review, commit"; \
-	    exit 1; \
-	  fi; }
-	@test -n "$(4)" || exit 0
-	@echo "FETCH (pinned): $(2)"
-	curl -fL -o $$@ $(1)/$(2)
-	echo "$(4)  $$@" > $$@.sha
-	sha256sum -c $$@.sha || { echo "PIN MISMATCH for $(2) — investigate before anything else"; exit 1; }
+	@if [ -n "$(4)" ]; then \
+	  echo "FETCH (pinned): $(2)"; \
+	  curl -fL -o $$@ $(1)/$(2); \
+	  echo "$(4)  $$@" > $$@.sha; \
+	  sha256sum -c $$@.sha || { echo "PIN MISMATCH for $(2) — investigate before anything else"; exit 1; }; \
+	elif [ "$(record)" = "1" ]; then \
+	  echo "FETCH (unpinned, recording): $(1)/$(2)"; \
+	  curl -fL -o $$@ $(1)/$(2); \
+	  sha=$$$$(sha256sum $$@ | cut -d' ' -f1); \
+	  sed -i "s|^$(3) :=.*|$(3) := $$$$sha|" versions.env; \
+	  echo "recorded $(3) := $$$$sha (source: $(1)) — REVIEW THE DOWNLOAD SOURCE, then commit"; \
+	else \
+	  echo "REFUSED: $(3) is not pinned — run 'make $(5) record=1' to fetch+record, review, commit"; \
+	  exit 1; \
+	fi
 endef
 
 KERNEL_URL_BASE := https://cdn.kernel.org/pub/linux/kernel/v6.x
@@ -71,6 +70,8 @@ $(OUT)/busybox: $(DL)/$(BVER).tar.bz2
 	$(MAKE) -C $(DL)/$(BVER)-build defconfig
 	# static, no NLS — the guest userland is this one binary
 	sed -i -e 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' $(DL)/$(BVER)-build/.config
+	# tc breaks against modern kernel headers (CBQ removed) — not needed in the guest
+	sed -i -e 's/^CONFIG_TC=y/# CONFIG_TC is not set/' $(DL)/$(BVER)-build/.config
 	$(MAKE) -C $(DL)/$(BVER)-build -j$(JOBS)
 	cp $(DL)/$(BVER)-build/busybox $@
 
