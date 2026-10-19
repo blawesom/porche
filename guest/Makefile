@@ -77,12 +77,21 @@ $(OUT)/busybox: $(DL)/$(BVER).tar.bz2
 	$(MAKE) -C $(DL)/$(BVER)-build -j$(JOBS)
 	cp $(DL)/$(BVER)-build/busybox $@
 
-$(OUT)/initramfs.cpio.gz: $(OUT)/busybox $(BUILD)/init.sh
+# --- live backend: std-only rust, static musl (same toolchain as the host) ------
+
+$(OUT)/inspect: bin/inspect/Cargo.toml $(wildcard bin/inspect/src/*.rs)
+	cargo build --release --manifest-path bin/inspect/Cargo.toml --target x86_64-unknown-linux-musl
+	cp bin/inspect/target/x86_64-unknown-linux-musl/release/inspect $@
+
+inspect: $(OUT)/inspect
+
+$(OUT)/initramfs.cpio.gz: $(OUT)/busybox $(OUT)/inspect $(BUILD)/init.sh
 	rm -rf $(OUT)/rootfs
 	mkdir -p $(OUT)/rootfs/bin $(OUT)/rootfs/dev $(OUT)/rootfs/proc $(OUT)/rootfs/sys
 	cp $(OUT)/busybox $(OUT)/rootfs/bin/busybox
 	for a in sh mount umount poweroff ip echo cat dd sleep base64; do \
 	  ln -sf busybox $(OUT)/rootfs/bin/$$a; done
+	cp $(OUT)/inspect $(OUT)/rootfs/bin/inspect
 	cp $(BUILD)/init.sh $(OUT)/rootfs/init
 	chmod +x $(OUT)/rootfs/init
 	cd $(OUT)/rootfs && find . | cpio -o -H newc --quiet | gzip -9 > $(CURDIR)/$@
@@ -96,9 +105,11 @@ $(OUT)/manifest.txt: $(OUT)/kernel $(OUT)/initramfs.cpio.gz
 	  k=$$(sha256sum $(OUT)/kernel | cut -d' ' -f1); \
 	  i=$$(sha256sum $(OUT)/initramfs.cpio.gz | cut -d' ' -f1); \
 	  c=$$(sha256sum $(CURDIR)/$(BUILD)/init.sh | cut -d' ' -f1); \
+	  x=$$(sha256sum $(OUT)/inspect | cut -d' ' -f1); \
 	  echo "kernel $(KERNEL_VERSION) sha256:$$k"; \
 	  echo "initramfs busybox-$(BUSYBOX_VERSION) sha256:$$i"; \
 	  echo "platform_init sha256:$$c"; \
+	  echo "inspect rust-std sha256:$$x"; \
 	} > $@
 	cat $@
 

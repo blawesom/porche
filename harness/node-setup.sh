@@ -65,6 +65,7 @@ echo "== packages + module warm-up (before modules_disabled=1) =="
 # 2026-10-19; /sys/module catches built-ins too, unlike lsmod)
 command -v nft > /dev/null 2>&1 || dnf install -y -q nftables
 command -v cryptsetup > /dev/null 2>&1 || dnf install -y -q cryptsetup
+command -v socat > /dev/null 2>&1 || dnf install -y -q socat
 command -v nft > /dev/null 2>&1 || { echo "FATAL: nft unusable"; exit 1; }
 command -v cryptsetup > /dev/null 2>&1 || { echo "FATAL: cryptsetup unusable"; exit 1; }
 for m in bridge veth nf_tables dm_mod dm_crypt loop tun; do

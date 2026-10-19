@@ -8,5 +8,6 @@
 # guest build artifacts
 guest/dl/
 guest/out/
+guest/bin/inspect/target/
 infra/integration/tfplan-bsu
 infra/integration/tfplan-links

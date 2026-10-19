@@ -1,0 +1,9 @@
+[package]
+name = "inspect"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# std-only on purpose (doc 07 §8.4: boring guest userland; the backend reads
+# /proc at request time — "live" means request-time, no caching, no deps)
+[dependencies]
