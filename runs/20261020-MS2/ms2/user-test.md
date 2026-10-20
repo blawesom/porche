@@ -84,10 +84,10 @@ UAT workloads ms2a (t0) and ms2b/ms2c (t1) wiped after the run — node store em
   open t0's objects; admin sees both).
 
 ```
-operator: <name>
+operator: benjamin ble
 date: 2026-10-20
 verdict: full user test passed
-signature: ________ / 2026-10-20
+signature: benjamin ble / 2026-10-20
 ```
 
 ## Extended smoke trace (post-fix, 2026-10-20)
