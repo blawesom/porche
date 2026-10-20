@@ -312,7 +312,7 @@ eyes.
 
 | # | Milestone | Scope locked to | Exit (committed artifacts; user test language) | Status |
 |---|---|---|---|---|
-| MS-1 | **PoC stack + consoles + full user test** | three §1 bets via the create/wipe path (KDF spike → guest image → create half → wipe half); both web UIs live on node 1 over the PoC adapter | data-plane run dirs under `runs/<id>/ms1/` + `user-test.md` + `uat/` screenshots + regression smoke recorded | in progress |
+| MS-1 | **PoC stack + consoles + full user test** | three §1 bets via the create/wipe path (KDF spike → guest image → create half → wipe half); both web UIs live on node 1 over the PoC adapter | data-plane run dirs under `runs/<id>/ms1/` + `user-test.md` + `uat/` screenshots + regression smoke recorded | in progress — code + run artifacts committed (`20261020-M1`, MS-1 commit `c5af428` on `a44c44c`); `user-test.md` records u01–u08+n1–n2 (real Chromium over live path) + `harness/uat-smoke.sh` fail=0; the **operator's hand-signature** is the sole open item (the milestone rule names it explicitly — see the signature block at the end of `runs/20261020-M1/ms1/user-test.md`) |
 | MS-2 | scale harness (WS-D) | PERF-1 n=100, PERF-5 n=20, PERF-8 1,000-cycle **gate**, drift/wedge/wipe-probe checks | filled §7.5 rows + CSVs/console logs; user test = the harness web/walkthrough covering the new results page (if surfaced) or the run report | pending |
 | MS-3 | escape delta (WS-E) | 3 classes × hardened/baseline (§7.3), §7.4 safety, delta verdicts only (E-18) | per-class paired run artifacts; user test = operator walk of the delta report | pending |
 | MS-4 | recorded run (WS-F) | FCOS stable OMI (doc 13 §8); full suite | the §7.5 record complete; user test = the record's sign-off walk | pending |
