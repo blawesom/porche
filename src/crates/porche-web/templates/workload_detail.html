@@ -26,7 +26,7 @@
   <table>
     <tr><th>state</th><td><span class="chip {{ row.state_css }}">{{ row.state_label }}</span></td></tr>
     <tr><th>placement</th><td class="subtle">{{ placement_reason }}</td></tr>
-    <tr><th>image digest</th><td><code>{{ image_digest }}</code></td></tr>
+    <tr><th>tenant</th><td><code>{{ tenant_id }}</code></td></tr>
     <tr><th>command</th><td><code>{{ command }}</code></td></tr>
     <tr><th>vcpu / ram</th><td>{{ row.vcpu }} / {{ row.ram_mib }}M</td></tr>
     <tr><th>ip6</th><td><code>{{ row.ip6 }}</code></td></tr>
@@ -61,6 +61,7 @@
       <text class="node" x="355" y="40" text-anchor="middle">volume</text>
       <text x="355" y="56" text-anchor="middle">{{ volume_slot }}</text>
     </svg>
+    <div class="subtle">netns <code>w-{{ row.id }}</code> · tap <code>tap-{{ row.id }}</code> · veth <code>veth-{{ row.id }}</code>{% if row.volume_link %} · mapper <code>porche-{{ row.id }}</code>{% endif %} — per-host derived device names (doc 14 §2)</div>
     <div class="subtle">static topology figure — the object's slots on this host</div>
   </div>
 </div>

@@ -730,6 +730,8 @@ struct WorkloadDetailPage {
     volume_slot: String,
     /// u03 "placement reason visible": why this workload sits where it does
     placement_reason: String,
+    /// owning tenant (MS-2 legibility)
+    tenant_id: String,
 }
 
 async fn workload_detail(
@@ -773,6 +775,7 @@ let t = t;
                 // host is the only Fleet member (F0 single-node scope) and the desired
                 // run dir/namespace paths are per-host derived (doc 14 §2).
                 placement_reason: "single-host PoC placement — this host is the only Fleet member (F0)".into(),
+                tenant_id: r.spec.tenant_id.clone(),
             }
             .render()
             .unwrap())
