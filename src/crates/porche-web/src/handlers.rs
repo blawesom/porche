@@ -154,7 +154,7 @@ async fn auth_mw(
     let tenant_of_token = |tok: &str| -> Option<String> {
         app.tenants
             .iter()
-            .find(|(_, t)| t == tok)
+            .find(|(_, e)| e.token == tok)
             .map(|(tid, _)| tid.clone())
     };
 
@@ -514,6 +514,46 @@ struct CreateForm {
     gw6: String,
 }
 
+/// MS-2.M3 quota gate (FR-5 skeleton): sums the tenant's live rows and
+/// rejects a create that would exceed its vCPU/RAM/count ceiling. Returns
+/// the rejection reason, or None when within quota. A tenant not in the
+/// map (legacy t0 with no entry) has no quota — PoC default-open for the
+/// operator's own scope only.
+fn quota_check(app: &AppState, tenant_id: &str, spec: &WorkloadSpec) -> Option<String> {
+    let Some((_, entry)) = app.tenants.iter().find(|(tid, _)| tid == tenant_id) else {
+        return None;
+    };
+    let q = &entry.quota;
+    let rows = app.store.list_for_tenant(tenant_id).unwrap_or_default();
+    let count = rows.len() as u32;
+    if count + 1 > q.workloads {
+        return Some(format!(
+            "quota: tenant {tenant_id} workload count {} would exceed {}",
+            count + 1,
+            q.workloads
+        ));
+    }
+    let cpu: u32 = rows.iter().map(|r| r.spec.vcpu).sum();
+    if cpu + spec.vcpu > q.vcpu {
+        return Some(format!(
+            "quota: tenant {tenant_id} vcpu {}+{} would exceed {}",
+            cpu,
+            spec.vcpu,
+            q.vcpu
+        ));
+    }
+    let ram: u32 = rows.iter().map(|r| r.spec.ram_mib).sum();
+    if ram + spec.ram_mib > q.ram_mib {
+        return Some(format!(
+            "quota: tenant {tenant_id} ram {}+{} MiB would exceed {} MiB",
+            ram,
+            spec.ram_mib,
+            q.ram_mib
+        ));
+    }
+    None
+}
+
 async fn create_submit(
     State(app): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -557,6 +597,22 @@ let t = t;
                     version: env!("CARGO_PKG_VERSION"),
                     base: app.base_path.clone(),
                     error: Some(e),
+                    form: vals,
+                    images: image_options(&app, &form.image_digest),
+                }
+                .render()
+                .unwrap())
+                .into_response();
+            }
+            // MS-2.M3 quota gate (FR-5 skeleton): vCPU/RAM/count per tenant,
+            // enforced BEFORE the pre-persist — an over-quota create re-renders
+            // the form with the reason, never a row in the store.
+            if let Some(qerr) = quota_check(&app, &t.tenant_id, &spec) {
+                audit(&app, &actor, "CreateWorkload", &form.id, &format!("rejected: {qerr}"));
+                return Html(WorkloadFormPage {
+                    version: env!("CARGO_PKG_VERSION"),
+                    base: app.base_path.clone(),
+                    error: Some(qerr),
                     form: vals,
                     images: image_options(&app, &form.image_digest),
                 }
@@ -1306,7 +1362,7 @@ mod tests {
         user_token: Option<String>,
         admin_token: Option<String>,
         base_path: String,
-        tenants: Vec<(String, String)>,
+        tenants: Vec<(String, crate::TenantEntry)>,
     ) -> Arc<AppState> {
         let dir = std::env::temp_dir().join(format!("porche-web-test-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -1568,8 +1624,20 @@ mod tests {
             Some("admin-secret".into()),
             String::new(),
             vec![
-                ("t0".into(), "tok-t0".into()),
-                ("t1".into(), "tok-t1".into()),
+                (
+                    "t0".into(),
+                    crate::TenantEntry {
+                        token: "tok-t0".into(),
+                        quota: crate::TenantQuota::default(),
+                    },
+                ),
+                (
+                    "t1".into(),
+                    crate::TenantEntry {
+                        token: "tok-t1".into(),
+                        quota: crate::TenantQuota::default(),
+                    },
+                ),
             ],
         );
         // two workloads, one per tenant
@@ -1658,5 +1726,58 @@ mod tests {
         assert_eq!(res.status(), StatusCode::OK);
         let page = body_string(res).await;
         assert!(page.contains("wa") && page.contains("wb"), "admin sees all tenants");
+    }
+
+    // MS-2.M3: quota enforcement — a tenant at its count ceiling cannot
+    // create; the rejection re-renders the form with the reason and nothing
+    // lands in the store.
+    #[tokio::test]
+    async fn quota_rejects_over_ceiling() {
+        let app = test_app_full(
+            "quota",
+            None,
+            Some("admin-secret".into()),
+            String::new(),
+            vec![(
+                "t1".into(),
+                crate::TenantEntry {
+                    token: "tok-t1".into(),
+                    quota: crate::TenantQuota {
+                        vcpu: 4,
+                        ram_mib: 512,
+                        workloads: 1,
+                    },
+                },
+            )],
+        );
+        // seed t1 with one workload (at the ceiling)
+        let mut s = spec_for_test("q1");
+        s.tenant_id = "t1".into();
+        app.store
+            .upsert(&s, &porche_core::WorkloadState::Running)
+            .unwrap();
+        let router = router(app.clone());
+
+        let body = format!("id=q2&image_digest=sha256%3A{}&command=true&vcpu=1&ram_mib=128&volume_mib=&ip6=fd00%3A%3A2&gw6=fd00%3A%3Aff", "a".repeat(64));
+        let res = router
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/w/new")
+                    .header(header::AUTHORIZATION, "Bearer tok-t1")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK, "form re-renders on quota reject");
+        let page = body_string(res).await;
+        assert!(page.contains("quota"), "rejection must name the quota");
+        // and nothing landed in the store
+        assert!(
+            app.store.get("q2").unwrap().is_none(),
+            "over-quota create must not persist a row"
+        );
     }
 }

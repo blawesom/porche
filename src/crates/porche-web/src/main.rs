@@ -45,7 +45,7 @@ pub struct AppState {
     /// `(tenant_id, token)` pairs from --tenants. A tenant token opens only
     /// the user surface, scoped to its tenant. The legacy single user token
     /// (if configured) maps to `t0`, preserving pre-MS-2 behavior.
-    pub tenants: Vec<(String, String)>,
+    pub tenants: Vec<(String, TenantEntry)>,
     /// Reverse-proxy path prefix (E-30: `/porche/user`, `/porche/admin` behind
     /// dev.laplane.net's HAProxy; empty = direct loopback access). The
     /// middleware strips it before routing; redirects/cookie re-add it.
@@ -57,10 +57,44 @@ pub struct AppState {
 const HTMX_JS: &str = include_str!("../static/htmx.min.js");
 
 /// One PoC tenant entry (E-31.3 marker: static token, no rotation — the P1
-/// planes own real authN).
-#[derive(serde::Deserialize)]
-struct TenantEntry {
-    token: String,
+/// planes own real authN). Quota is the MS-2.M3 FR-5 skeleton: vCPU/RAM/count
+/// ceilings enforced at create; egress and legacy-v4 classes stay out at
+/// PoC scale (measured in MS-3, not enforced).
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct TenantQuota {
+    #[serde(default = "default_quota_cpu")]
+    pub vcpu: u32,
+    #[serde(default = "default_quota_ram")]
+    pub ram_mib: u32,
+    #[serde(default = "default_quota_count")]
+    pub workloads: u32,
+}
+
+fn default_quota_cpu() -> u32 {
+    16
+}
+fn default_quota_ram() -> u32 {
+    16384
+}
+fn default_quota_count() -> u32 {
+    10
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct TenantEntry {
+    pub token: String,
+    #[serde(default)]
+    pub quota: TenantQuota,
+}
+
+impl Default for TenantQuota {
+    fn default() -> Self {
+        TenantQuota {
+            vcpu: default_quota_cpu(),
+            ram_mib: default_quota_ram(),
+            workloads: default_quota_count(),
+        }
+    }
 }
 
 /// Cloud Hypervisor version line (`cloud-hypervisor --version`), cached —
@@ -187,7 +221,7 @@ async fn main() {
     // MS-2 PoC tenant map (E-31.3): static JSON, no issuance/rotation — the
     // marker is the honesty rule: this is PoC-grade auth, never claimed as
     // security. The legacy single user token (if any) maps to t0.
-    let mut tenants: Vec<(String, String)> = Vec::new();
+    let mut tenants: Vec<(String, TenantEntry)> = Vec::new();
     if let Some(path) = &cli.tenants {
         let text = std::fs::read_to_string(path)
             .unwrap_or_else(|e| panic!("porche-web: tenants {}: {e}", path.display()));
@@ -198,7 +232,7 @@ async fn main() {
                 && !tid.is_empty()
                 && tid.len() <= 16
             {
-                tenants.push((tid, e.token));
+                tenants.push((tid, e));
             } else {
                 panic!("porche-web: invalid tenant id {tid:?} (must be [a-z0-9-], ≤16 chars)");
             }
@@ -206,7 +240,13 @@ async fn main() {
     }
     if let Some(ut) = &cli.user_token {
         // legacy single-tenant token → t0 scope (preserves pre-MS-2 behavior)
-        tenants.push(("t0".into(), ut.clone()));
+        tenants.push((
+            "t0".into(),
+            TenantEntry {
+                token: ut.clone(),
+                quota: TenantQuota::default(),
+            },
+        ));
     }
 
     // E-30: normalize the reverse-proxy prefix once — no trailing slash, no

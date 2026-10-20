@@ -90,12 +90,15 @@ pub fn wipe<S: DesiredStateStore, E: Executor>(
 ) -> Result<WipeReport, OpsError> {
     let record = store.get(id)?.ok_or_else(|| OpsError::NotFound(id.into()))?;
     match record.state {
-        WorkloadState::Running | WorkloadState::Stopped | WorkloadState::Creating => {}
-        other => {
+        WorkloadState::Running
+        | WorkloadState::Stopped
+        | WorkloadState::Creating
+        | WorkloadState::Failed { .. } => {}
+        WorkloadState::Stopping => {
             return Err(OpsError::WrongState(
                 id.into(),
-                other,
-                "running, stopped or creating (interrupted create = residue to wipe)",
+                record.state,
+                "stop in flight — wait for stopped, then wipe",
             ))
         }
     }
