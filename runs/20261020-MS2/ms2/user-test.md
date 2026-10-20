@@ -89,3 +89,31 @@ date: 2026-10-20
 verdict: full user test passed
 signature: ________ / 2026-10-20
 ```
+
+## Extended smoke trace (post-fix, 2026-10-20)
+
+`harness/uat-smoke.sh` extended with MS-2 tenancy backstops (t1 view isolation,
+cross-tenant 404, tenant-token-never-opens-admin; activated via SMOKE_T1_TOKEN),
+run against the live public path:
+
+```
+smoke: user login 200               pass
+smoke: admin login 200              pass
+smoke: cross-domain user on /a = 401 pass
+smoke: cross-domain admin on /w = 401 pass
+smoke: unauthenticated = 401        pass
+smoke: create form 200              pass
+smoke: create→done probe (live path) pass
+smoke: delete→wipe report renders pass
+smoke: t1 login 200 (own view)      pass
+smoke: t1 sees no t0 rows (isolation) pass
+smoke: t1 detail of t0 workload = 404 pass
+smoke: t1 token on /a = 401 (domain split) pass
+smoke: done (fail=0)
+```
+
+The extended smoke's delete step caught a real regression introduced during the
+MS-2 edits: the `/w/{id}/stop` and `/w/{id}/delete` routes were accidentally
+dropped from the router (empty-body 404s). Fixed, a route-registration regression
+test added (`mutation_routes_are_registered`), and the full smoke re-run green
+above. Defect #3 for the in-milestone record.

@@ -31,6 +31,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/w/volumes/{id}/delete", post(delete_volume))
         .route("/w/{id}", get(workload_detail))
         .route("/w/{id}/console", get(console_tail))
+        .route("/w/{id}/stop", post(stop_workload))
+        .route("/w/{id}/delete", post(delete_workload))
         .route("/a", get(fleet))
         .route("/a/host", get(host_detail))
         .route("/htmx.js", get(htmx_js))
@@ -1782,5 +1784,38 @@ mod tests {
             app.store.get("q2").unwrap().is_none(),
             "over-quota create must not persist a row"
         );
+    }
+
+    // route regression: every mutating route must be registered (a 2026-10-20
+    // edit dropped /w/{id}/stop and /w/{id}/delete — axum 404'd empty, caught
+    // by the smoke's delete step)
+    #[tokio::test]
+    async fn mutation_routes_are_registered() {
+        let app = test_app("routes");
+        let mut s = spec_for_test("rt1");
+        s.tenant_id = "t0".into();
+        app.store
+            .upsert(&s, &porche_core::WorkloadState::Stopped)
+            .unwrap();
+        let router = router(app);
+        for path in ["/w/rt1/stop", "/w/rt1/delete", "/w/rt1/console"] {
+            let res = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri(path)
+                        .header(header::AUTHORIZATION, "Bearer user-secret")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_ne!(
+                res.status(),
+                StatusCode::NOT_FOUND,
+                "{path} must be a registered route"
+            );
+        }
     }
 }

@@ -73,5 +73,32 @@ step "delete→wipe report renders"
 body=$(curl -s -H "Cookie: porche_token=$UT" -X POST "$WU/w/$id/delete")
 echo "$body" | grep -q 'wipe report' && pass || failmsg "wipe report page missing"
 
+# --- MS-2 tenancy backstops (E-31.2) ------------------------------------
+# usage: also export SMOKE_T1_TOKEN (a second tenant's token) to exercise
+# the isolation checks; without it they are skipped.
+if [ -n "${SMOKE_T1_TOKEN:-}" ]; then
+  T1=$SMOKE_T1_TOKEN
+
+  step "t1 login 200 (own view)"
+  c=$(curl -s -o /dev/null -w '%{http_code}' -H "Cookie: porche_token=$T1" "$WU/w")
+  [ "$c" = 200 ] && pass || failmsg "want 200 got $c"
+
+  step "t1 sees no t0 rows (isolation)"
+  body=$(curl -s -H "Cookie: porche_token=$T1" "$WU/w")
+  if echo "$body" | grep -q 'no workloads' || ! echo "$body" | grep -q "$id"; then
+    pass
+  else
+    failmsg "t1 list leaks t0 rows"
+  fi
+
+  step "t1 detail of t0 workload = 404"
+  c=$(curl -s -o /dev/null -w '%{http_code}' -H "Cookie: porche_token=$T1" "$WU/w/$id")
+  [ "$c" = 404 ] && pass || failmsg "want 404 got $c (cross-tenant leak)"
+
+  step "t1 token on /a = 401 (domain split)"
+  c=$(curl -s -o /dev/null -w '%{http_code}' -H "Cookie: porche_token=$T1" "$AU/a")
+  [ "$c" = 401 ] && pass || failmsg "want 401 got $c"
+fi
+
 echo "smoke: done (fail=$fail)"
 exit $fail
