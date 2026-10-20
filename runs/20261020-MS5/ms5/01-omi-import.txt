@@ -1,0 +1,14 @@
+FCOS OMI import (MS-5.M1) — 2026-10-20
+=======================================
+source: Fedora CoreOS stable 44.20260913.3.2, openstack variant
+  https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/44.20260913.3.2/x86_64/fedora-coreos-44.20260913.3.2-openstack.x86_64.qcow2.xz
+  xz sha256: ff3079bf7a5bd799ffbf974ad8c161ee06255948d909f9e1a954f3665f0ce901 (stream metadata; verified at download)
+  uncompressed sha256: 59f357c672dc8f8323fe49afbe96ab60382d55cca62fdbfe306f0071baf2bba9
+  qcow2 virtual size: 10737418240 (10 GiB)
+path: qcow2 -> OOS bucket (work2/porche-ms5/, presigned URL) ->
+  CreateSnapshot (snap-834cde80, 10 GiB, completed) ->
+  CreateImage (ami-5db9886d, name porche-fcos-44.20260913.3.2, root /dev/sda1,
+  available)
+note: first import attempt with the compressed size (2071789568) landed
+VolumeSize=1 GiB — deleted and re-imported with the qcow2 VIRTUAL size; the
+API takes the volume size, not the file size.
