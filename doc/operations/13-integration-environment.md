@@ -168,6 +168,11 @@ Region `eu-west-2`; subregion `eu-west-2a`. Credentials: local `~/.osc/config.js
     The working links were made directly via `octl` (`LinkVolume`, `LinkPublicIp`).
     TF state holds the current records; reconcile with the documented
     out-of-band-then-import pattern before the next TF use.
+15. **Capacity fallback ladder (operator, E-31.1, 2026-10-20)**: if `tinav7.c8r16p1`
+    allocation is a bottleneck (§4.13's 504-loops, group exhaustion), try
+    **tinav5/v6/v7 alternatives before blocking** — the PoC bets pin dedicated
+    tenancy + nested virtualization (§5), not the exact metal type. Record any
+    substitution in the run's fixtures (type, tenancy, nested-virt verified).
 
 ## 5. Provisioning recipe (reproducible)
 

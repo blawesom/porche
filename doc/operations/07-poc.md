@@ -1,23 +1,17 @@
 # 07 — PoC Scope (pre-P0)
+<!--
+  history: v1..v9 see git log (§E-29 rollback re-baselined this file).
+  **v11 (2026-10-20, E-31)**: ledger reordered by operator — MS-2 = tenancy +
+  console onboarding (multitenancy slice before scale); subsequent rows
+  renumbered (scale → MS-3, escape → MS-4, recorded run → MS-5, growth →
+  MS-6+). Capacity directive recorded: tinav5/v6/v7 fallbacks allowed.
+  **v10 (2026-10-20, E-29)**: rollback to corpus-only; re-entry is
+  milestone-based (§8.6): MS-1 = PoC stack + user/admin consoles + full user test.
+  §8 restructured: §8.5 = proven evidence only, §8.6 = milestone ledger + milestone
+  rule.
+-->
 
-Working document — v10, 2026-10-20. **v2**: live migration explicitly deferred (v1 goal,
-not PoC scope — E-3). **v3 (E-4)**: PoC re-targeted to **direct Cloud Hypervisor
-orchestration** — no containerd, no Kata. **v4 (E-5)**: PoC host = **Fedora CoreOS,
-stable stream** — the tracked upstream. **v5 (E-6/E-7)**: wipe = crypto-erase only;
-escape suite mapped to hardening controls. **v6 (E-16/E-17/E-18)**: the PoC executes
-**in the integration environment** (nested virt, doc 13) — PERF numbers there are
-mechanism-only smoke signals, metal keeps every gate; the escape suite validates by
-baseline **delta**; create takes platform images only. **v7 (E-22/E-25)**: the guest boots
-**IPv6 from the cmdline** (single-host scope); cross-host v6, legacy v4, and attached v4
-stay deferred. **v8 (test plan + sequencing)**: §7 concretizes the test plan — methods,
-samples, thresholds, wipe probe, baseline toggles, results template; the harness develops
-on node 1's Rocky interim, the recorded PoC runs on the FCOS OMI (E-5 unchanged —
-sequencing, not scope). **v9 (implementation plan, 2026-10-19)**: §7.4 escape artifact
-policy decided (**hybrid**); §8 opened — repository layout (E-27), workstreams
-WS-A..WS-F, burst-mode sequencing, ratified defaults (§8.4). **v10 (2026-10-20,
-E-29)**: rollback to corpus-only; re-entry is milestone-based (§8.6): MS-1 = PoC stack +
-user/admin consoles + full user test. §8 restructured: §8.5 = proven evidence only, §8.6 =
-milestone ledger + milestone rule. Defines the **first proof of concept**: the smallest buildable system that validates the riskiest technical bets of
+Defines the **first proof of concept**: the smallest buildable system that validates the riskiest technical bets of
 the design. Everything not listed in scope is **deferred by decision**, not forgotten —
 see §3.
 
@@ -313,10 +307,11 @@ eyes.
 | # | Milestone | Scope locked to | Exit (committed artifacts; user test language) | Status |
 |---|---|---|---|---|
 | MS-1 | **PoC stack + consoles + full user test** | three §1 bets via the create/wipe path (KDF spike → guest image → create half → wipe half); both web UIs live on node 1 over the PoC adapter | data-plane run dirs under `runs/<id>/ms1/` + `user-test.md` + `uat/` screenshots + regression smoke recorded | in progress — code + run artifacts committed (`20261020-M1`, MS-1 commit `c5af428` on `a44c44c`); `user-test.md` records u01–u08+n1–n2 (real Chromium over live path) + `harness/uat-smoke.sh` fail=0; the **operator's hand-signature** is the sole open item (the milestone rule names it explicitly — see the signature block at the end of `runs/20261020-M1/ms1/user-test.md`) |
-| MS-2 | scale harness (WS-D) | PERF-1 n=100, PERF-5 n=20, PERF-8 1,000-cycle **gate**, drift/wedge/wipe-probe checks | filled §7.5 rows + CSVs/console logs; user test = the harness web/walkthrough covering the new results page (if surfaced) or the run report | pending |
-| MS-3 | escape delta (WS-E) | 3 classes × hardened/baseline (§7.3), §7.4 safety, delta verdicts only (E-18) | per-class paired run artifacts; user test = operator walk of the delta report | pending |
-| MS-4 | recorded run (WS-F) | FCOS stable OMI (doc 13 §8); full suite | the §7.5 record complete; user test = the record's sign-off walk | pending |
-| MS-5+ | console/object growth per doc 09's map (audit view, tokens, volumes CRUD, deeper topology) | enters only inside a milestone window; its user test covers the new surface alongside existing flows | updated `user-test.md` per milestone | pending |
+| MS-2 | **Tenancy + console onboarding (E-31.2, operator-ordered before scale)** | first multitenancy slice: per-tenant tokens + view isolation (a tenant sees only its workloads/volumes), quota skeleton (vCPU/RAM/count per tenant, enforced, PoC-grade store), console surfaces making the three core concepts legible (placement reason, tier identity on volumes, netns/ip6 in topology) — PoC auth per E-31.3 with markers | runs/<id>/ms2/ artifacts (tenant-isolation negative tests, quota enforcement records, wipe of test tenants) + updated `user-test.md` walking the tenant view; user test = two tenants + admin in the browser, isolation verified visually | pending |
+| MS-3 | scale harness (WS-D) | PERF-1 n=100, PERF-5 n=20, PERF-8 1,000-cycle **gate**, drift/wedge/wipe-probe checks | filled §7.5 rows + CSVs/console logs; user test = the harness web/walkthrough covering the new results page (if surfaced) or the run report | pending |
+| MS-4 | escape delta (WS-E) | 3 classes × hardened/baseline (§7.3), §7.4 safety, delta verdicts only (E-18) | per-class paired run artifacts; user test = operator walk of the delta report | pending |
+| MS-5 | recorded run (WS-F) | FCOS stable OMI (doc 13 §8); full suite | the §7.5 record complete; user test = the record's sign-off walk | pending |
+| MS-6+ | console/object growth per doc 09's map (audit view, tokens, volumes CRUD, deeper topology) | enters only inside a milestone window; its user test covers the new surface alongside existing flows | updated `user-test.md` per milestone | pending |
 
 "User test language" in every row means the recorded human UAT covers **every page and
 every operation** of the surfaces that milestone touches (the MS-1 user-test order is
