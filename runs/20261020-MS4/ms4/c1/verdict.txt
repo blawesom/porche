@@ -1,0 +1,6 @@
+== hardened (offloads off) ==
+== baseline (offloads on) ==
+hardened: {'label': 'hardened', 'stress_completed': True, 'kernel_panic': False, 'network_up': False, 'wipe_ok': True}
+baseline: {'label': 'baseline', 'stress_completed': True, 'kernel_panic': False, 'network_up': False, 'wipe_ok': True}
+DELTA: present — outcome differs between hardened and baseline
+verdict: delta demonstrated (E-18; no absolute-security claim)

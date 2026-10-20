@@ -16,7 +16,7 @@ run_case() {
   local label=$1 id=$2 env_baseline=$3
   local spec=/tmp/ms4-$id.json
   cat > "$spec" <<EOF
-{"id":"$id","image_digest":"$IMG","command":"for i in 1 2 3 4 5 6 7 8; do busybox ping -c 200 -s 65000 fd42:1:1::ff 2>&1 | busybox tail -1; done; echo OFFLOAD-STRESS-DONE","vcpu":1,"ram_mib":256,"volume":null,"ip6":"fd42:44::1","gw6":"fd42:1:1::ff"}
+{"id":"$id","image_digest":"$IMG","command":"for i in 1 2 3 4 5 6 7 8; do busybox ping -c 60 -i 0.1 -s 65000 -W 1 fd42:1:1::ff 2>&1 | busybox tail -1; done; echo OFFLOAD-STRESS-DONE","vcpu":1,"ram_mib":256,"volume":null,"ip6":"fd42:1:1::54","gw6":"fd42:1:1::ff"}
 EOF
   local t0=$(date +%s%3N)
   if [ "$env_baseline" = 1 ]; then

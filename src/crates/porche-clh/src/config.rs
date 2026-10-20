@@ -48,6 +48,12 @@ impl VmConfig {
             net_if["offload_tso"] = serde_json::json!(false);
             net_if["offload_ufo"] = serde_json::json!(false);
             net_if["offload_csum"] = serde_json::json!(false);
+        } else {
+            // E-18 baseline: explicitly ON (v54 defaults to false, so omission
+            // is NOT a baseline — observed while validating the delta run)
+            net_if["offload_tso"] = serde_json::json!(true);
+            net_if["offload_ufo"] = serde_json::json!(true);
+            net_if["offload_csum"] = serde_json::json!(true);
         }
         let mut payload = serde_json::json!({
             "kernel": self.kernel_path,

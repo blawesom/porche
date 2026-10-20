@@ -1,0 +1,3 @@
+hardened devices:  []
+baseline devices:  []
+DELTA: none (SEC-31 note: same device surface both sides)
