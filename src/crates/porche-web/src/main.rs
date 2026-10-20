@@ -41,6 +41,10 @@ pub struct AppState {
     pub admin_token: Option<String>,
     /// CLH version pin — executed once at startup, never per render.
     pub clh: ClhPin,
+    /// Reverse-proxy path prefix (E-30: `/porche/user`, `/porche/admin` behind
+    /// dev.laplane.net's HAProxy; empty = direct loopback access). The
+    /// middleware strips it before routing; redirects/cookie re-add it.
+    pub base_path: String,
 }
 
 /// htmx, vendored (E-28 — no CDN) for live fragments only: console-log tail
@@ -126,6 +130,9 @@ struct Cli {
     /// Listen port (default: 18081 for --surface user, 18082 for --surface admin).
     #[arg(long)]
     port: Option<u16>,
+    /// Reverse-proxy path prefix, e.g. /porche/user (E-30). Empty = direct.
+    #[arg(long, env = "PORCHE_WEB_BASE_PATH", default_value = "")]
+    base_path: String,
     /// `/w` user-surface token.
     #[arg(long, env = "PORCHE_WEB_USER_TOKEN")]
     user_token: Option<String>,
@@ -152,6 +159,17 @@ async fn main() {
         std::process::exit(2);
     }
 
+    // E-30: normalize the reverse-proxy prefix once — no trailing slash, no
+    // wildcard; empty means direct loopback access (the MS-1 default).
+    let base_path = {
+        let p = cli.base_path.trim().trim_end_matches('/').to_string();
+        if p.contains('*') || (p.starts_with('/') && p.contains("//")) {
+            eprintln!("porche-web: invalid --base-path {p:?}");
+            std::process::exit(2);
+        }
+        p
+    };
+
     std::fs::create_dir_all(&cli.data_dir)
         .unwrap_or_else(|e| panic!("porche-web: data dir {}: {e}", cli.data_dir.display()));
 
@@ -168,6 +186,7 @@ async fn main() {
         user_token: cli.user_token.clone(),
         admin_token: cli.admin_token.clone(),
         clh: ClhPin::detect(),
+        base_path: base_path.clone(),
     });
 
     let port = cli.port.unwrap_or_else(|| cli.surface.default_port());
@@ -175,9 +194,17 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .unwrap_or_else(|e| panic!("porche-web: bind {addr}: {e}"));
+    let prefix = if base_path.is_empty() {
+        "/".to_string()
+    } else {
+        format!("{base_path}/")
+    };
     eprintln!(
-        "porche-web: http://{}/w (user) and /a (admin) — {} surface, live only (E-29)",
+        "porche-web: http://{}/{}w (user) and {}/{}a (admin) — {} surface, live only (E-29)",
         listener.local_addr().unwrap(),
+        prefix,
+        listener.local_addr().unwrap(),
+        prefix.clone(),
         cli.surface.name()
     );
     axum::serve(listener, handlers::router(state))

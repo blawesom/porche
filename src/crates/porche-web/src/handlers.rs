@@ -19,7 +19,9 @@ use porche_core::{ops, DesiredStateStore, Record, VolumeSpec, WorkloadSpec, Work
 use std::sync::Arc;
 
 pub fn router(state: Arc<AppState>) -> Router {
-    let root = move || async move { Redirect::to("/w") };
+    let root = move |State(app): State<Arc<AppState>>| async move {
+        Redirect::to(&format!("{}/w", app.base_path))
+    };
     let r = Router::new()
         .route("/", get(root))
         .route("/w", get(workloads))
@@ -34,11 +36,20 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/a", get(fleet))
         .route("/a/host", get(host_detail))
         .route("/htmx.js", get(htmx_js));
-    r.layer(axum::middleware::from_fn_with_state(
+    let r = r.layer(axum::middleware::from_fn_with_state(
         state.clone(),
         auth_mw,
-    ))
-    .with_state(state)
+    ));
+    // E-30: behind a reverse proxy the whole tree nests under the prefix;
+    // `nest` strips it before route matching (a middleware URI rewrite
+    // cannot — axum matches on the original request path). Direct mode
+    // (empty prefix) is an un-nested router.
+    if state.base_path.is_empty() {
+        r.with_state(state)
+    } else {
+        let bp = state.base_path.clone();
+        Router::new().nest(bp.as_str(), r.with_state(state))
+    }
 }
 
 // --- auth: two opaque-token domains (E-8 / E-29) --------------------------------
@@ -110,11 +121,22 @@ fn request_auth(req: &Request<axum::body::Body>, user: Option<&str>, admin: Opti
     }
 }
 
-async fn auth_mw(State(app): State<Arc<AppState>>, req: Request<axum::body::Body>, next: Next) -> Response {
+async fn auth_mw(
+    State(app): State<Arc<AppState>>,
+    req: Request<axum::body::Body>,
+    next: Next,
+) -> Response {
+    // E-30: the prefix is handled by `Router::nest` in `router()` (it strips
+    // the prefix before route matching — a middleware URI rewrite cannot,
+    // axum matches on the original request path). This layer keeps the two
+    // strict token domains and re-joins redirect `Location`s under the
+    // prefix for the browser.
+    let bp = app.base_path.clone();
     let path = req.uri().path().to_string();
     let Some(domain) = Domain::of_path(&path) else {
         // static asset: no auth
-        return next.run(req).await;
+        let res = next.run(req).await;
+        return rejoin_prefix(res, &bp);
     };
 
     let user_want = app.user_token.as_deref();
@@ -132,7 +154,7 @@ async fn auth_mw(State(app): State<Arc<AppState>>, req: Request<axum::body::Body
             Domain::Admin => is_admin,
         };
         if ok {
-            return set_cookie_and_redirect(&qt, &path);
+            return set_cookie_and_redirect(&qt, &path, &bp);
         }
     }
 
@@ -142,7 +164,8 @@ async fn auth_mw(State(app): State<Arc<AppState>>, req: Request<axum::body::Body
         Domain::Admin => auth.admin,
     };
     if ok {
-        return next.run(req).await;
+        let res = next.run(req).await;
+        return rejoin_prefix(res, &bp);
     }
 
     // strict 401 on any unauthenticated/wrong-token surface (E-29 contract,
@@ -150,7 +173,7 @@ async fn auth_mw(State(app): State<Arc<AppState>>, req: Request<axum::body::Body
     // workaround redirect and never the page behind a "login" landing. The
     // POST/other-method path gets the empty 401 body only.
     if req.method() == axum::http::Method::GET || req.method() == axum::http::Method::HEAD {
-        render_auth401(domain)
+        render_auth401(domain, &bp)
     } else {
         (
             StatusCode::UNAUTHORIZED,
@@ -162,32 +185,56 @@ async fn auth_mw(State(app): State<Arc<AppState>>, req: Request<axum::body::Body
 
 /// Set the cookie and 303 to the clean path. One cookie name, one domain's
 /// value at a time: `?token=` only ever reaches here under the letter the
-/// path configured it for.
-fn set_cookie_and_redirect(token: &str, path: &str) -> Response {
+/// path configured it for. `base_path` (E-30) scopes the cookie and re-joins
+/// the redirect target under the reverse-proxy prefix.
+fn set_cookie_and_redirect(token: &str, path: &str, base_path: &str) -> Response {
     (
         StatusCode::SEE_OTHER,
         [
             (
                 header::SET_COOKIE,
-                format!("{COOKIE}={token}; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax"),
+                format!("{COOKIE}={token}; Path={}/; Max-Age=86400; HttpOnly; SameSite=Lax", 
+                    if base_path.is_empty() { "" } else { base_path }),
             ),
-            (header::LOCATION, path.to_string()),
+            (header::LOCATION, format!("{base_path}{path}")),
         ],
     )
         .into_response()
+}
+
+/// Re-join a response's `Location` header under the reverse-proxy prefix
+/// (E-30): handlers emit clean paths (`/w/…`, `/a`); behind the proxy the
+/// browser must land on `{base_path}/w/…`.
+fn rejoin_prefix(mut res: Response, base_path: &str) -> Response {
+    if base_path.is_empty() {
+        return res;
+    }
+    if let Some(loc) = res
+        .headers()
+        .get(header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+    {
+        if loc.starts_with('/') && !loc.starts_with(&format!("{base_path}/")) {
+            let new = format!("{base_path}{loc}");
+            if let Ok(hv) = axum::http::HeaderValue::from_str(&new) {
+                res.headers_mut().insert(header::LOCATION, hv);
+            }
+        }
+    }
+    res
 }
 
 #[derive(Template)]
 #[template(path = "auth401.html")]
 struct Auth401Page {
     surface: &'static str,
-    surface_home: &'static str,
+    surface_home: String,
 }
 
 /// The 401 HTML page (the surface's login form) — rendered straight from the
 /// middleware on every unauthenticated request; the login page IS the 401
 /// page, there is no separate login surface to redirect to.
-fn render_auth401(domain: Domain) -> Response {
+fn render_auth401(domain: Domain, base_path: &str) -> Response {
     let (surface, home) = match domain {
         Domain::Admin => ("admin", "/a"),
         Domain::User => ("user", "/w"),
@@ -197,7 +244,7 @@ fn render_auth401(domain: Domain) -> Response {
         Html(
             Auth401Page {
                 surface,
-                surface_home: home,
+                surface_home: format!("{base_path}{home}"),
             }
             .render()
             .unwrap(),
@@ -324,7 +371,7 @@ async fn workloads(State(app): State<Arc<AppState>>) -> Html<String> {
     let records = app.store.list().unwrap_or_default();
     let rows = records.iter().map(|r| row_of(&app, r)).collect();
     WorkloadsPage {
-        version: env!("CARGO_PKG_VERSION"), base: String::new(),
+        version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
         records: rows,
     }
     .render()
@@ -355,7 +402,7 @@ struct WorkloadFormPage {
 
 async fn create_form(State(app): State<Arc<AppState>>) -> Html<String> {
     WorkloadFormPage {
-        version: env!("CARGO_PKG_VERSION"), base: String::new(),
+        version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
         error: None,
         form: FormVals {
             vcpu: "1".into(),
@@ -420,7 +467,7 @@ async fn create_submit(
                 audit(&app, &actor, "CreateWorkload", &form.id, &format!("rejected: {e}"));
                 return Html(WorkloadFormPage {
                     version: env!("CARGO_PKG_VERSION"),
-                    base: String::new(),
+                    base: app.base_path.clone(),
                     error: Some(e),
                     form: vals,
                     images: image_options(&app, &form.image_digest),
@@ -442,7 +489,7 @@ async fn create_submit(
                 audit(&app, &actor, "CreateWorkload", &form.id, &format!("rejected: {e}"));
                 return Html(WorkloadFormPage {
                     version: env!("CARGO_PKG_VERSION"),
-                    base: String::new(),
+                    base: app.base_path.clone(),
                     error: Some(e),
                     form: vals,
                     images: image_options(&app, &form.image_digest),
@@ -473,7 +520,7 @@ async fn create_submit(
         Err(e) => {
             audit(&app, &actor, "CreateWorkload", &form.id, &format!("rejected: {e}"));
             Html(WorkloadFormPage {
-                version: env!("CARGO_PKG_VERSION"), base: String::new(),
+                version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
                 error: Some(e.to_string()),
                 form: vals,
                 images: image_options(&app, &form.image_digest),
@@ -557,7 +604,7 @@ async fn workload_detail(
             let socket = vm_socket_present(&app.data_dir, &id);
             let d = derive_state(&r.state, &signals, socket);
             Html(WorkloadDetailPage {
-                version: env!("CARGO_PKG_VERSION"), base: String::new(),
+                version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
                 row: row_of(&app, &r),
                 command: r.spec.command,
                 image_digest: r.spec.image_digest,
@@ -584,7 +631,7 @@ async fn workload_detail(
             .unwrap())
             .into_response()
         }
-        _ => not_found_page(&format!("workload not found: {id}"), "/w").into_response(),
+        _ => not_found_page(&app, &format!("workload not found: {id}"), "/w").into_response(),
     }
 }
 
@@ -624,7 +671,7 @@ async fn stop_workload(
         }
         Err(e) => {
             audit(&app, &actor, "StopWorkload", &id, &format!("rejected: {e}"));
-            error_page(&format!("stop {id}: {e}"), &format!("/w/{id}")).into_response()
+            error_page(&app, &format!("stop {id}: {e}"), &format!("/w/{id}")).into_response()
         }
     }
 }
@@ -647,6 +694,7 @@ struct WipeReportPage {
 }
 
 fn wipe_report_page(
+    base_path: &str,
     method: &'static str,
     id: &str,
     report: &porche_core::WipeReport,
@@ -654,7 +702,7 @@ fn wipe_report_page(
     next_label: &'static str,
 ) -> WipeReportPage {
     WipeReportPage {
-        version: env!("CARGO_PKG_VERSION"), base: String::new(),
+        version: env!("CARGO_PKG_VERSION"), base: base_path.to_string(),
         method,
         id: id.to_string(),
         report_json: serde_json::to_string_pretty(report).unwrap_or_else(|_| "{}".into()),
@@ -688,12 +736,12 @@ async fn delete_workload(
     match result {
         Ok(report) => {
             audit(&app, &actor, "DeleteWorkload", &id, "ok (wipe report rendered)");
-            Html(wipe_report_page("DeleteWorkload", &id, &report, "/w", "workloads").render().unwrap())
+            Html(wipe_report_page(&app.base_path, "DeleteWorkload", &id, &report, "/w", "workloads").render().unwrap())
                 .into_response()
         }
         Err(e) => {
             audit(&app, &actor, "DeleteWorkload", &id, &format!("rejected: {e}"));
-            error_page(&format!("delete {id}: {e}"), &format!("/w/{id}")).into_response()
+            error_page(&app, &format!("delete {id}: {e}"), &format!("/w/{id}")).into_response()
         }
     }
 }
@@ -745,7 +793,7 @@ struct VolumesPage {
 
 async fn volumes(State(app): State<Arc<AppState>>) -> Html<String> {
     VolumesPage {
-        version: env!("CARGO_PKG_VERSION"), base: String::new(),
+        version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
         rows: volume_rows(&app),
     }
     .render()
@@ -768,7 +816,7 @@ async fn volume_detail(State(app): State<Arc<AppState>>, Path(id): Path<String>)
     let rec = app.store.get(&id).ok().flatten();
     match (row, rec) {
         (Some(row), Some(r)) => Html(VolumeDetailPage {
-            version: env!("CARGO_PKG_VERSION"), base: String::new(),
+            version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
             row,
             created: epoch_utc(r.created_at),
             updated: epoch_utc(r.updated_at),
@@ -776,7 +824,7 @@ async fn volume_detail(State(app): State<Arc<AppState>>, Path(id): Path<String>)
         .render()
         .unwrap())
         .into_response(),
-        _ => not_found_page(&format!("volume not found: {id} (volumes live with their workload)"), "/w/volumes")
+        _ => not_found_page(&app, &format!("volume not found: {id} (volumes live with their workload)"), "/w/volumes")
             .into_response(),
     }
 }
@@ -804,7 +852,7 @@ async fn delete_volume(
         Ok(report) => {
             audit(&app, &actor, "DeleteVolume", &id, "ok (wipe report rendered)");
             Html(
-                wipe_report_page("DeleteVolume", &id, &report, "/w/volumes", "volumes")
+                wipe_report_page(&app.base_path, "DeleteVolume", &id, &report, "/w/volumes", "volumes")
                     .render()
                     .unwrap(),
             )
@@ -812,7 +860,7 @@ async fn delete_volume(
         }
         Err(e) => {
             audit(&app, &actor, "DeleteVolume", &id, &format!("rejected: {e}"));
-            error_page(&format!("delete volume {id}: {e}"), "/w/volumes").into_response()
+            error_page(&app, &format!("delete volume {id}: {e}"), "/w/volumes").into_response()
         }
     }
 }
@@ -960,7 +1008,7 @@ async fn fleet(State(app): State<Arc<AppState>>) -> Html<String> {
         .collect();
     images.sort();
     FleetPage {
-        version: env!("CARGO_PKG_VERSION"), base: String::new(),
+        version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
         hostname: hostname(),
         osrelease: read_trim("/proc/sys/kernel/osrelease"),
         clh_version: app.clh.version.clone(),
@@ -1021,7 +1069,7 @@ async fn host_detail(State(app): State<Arc<AppState>>) -> Html<String> {
         })
         .collect();
     HostDetailPage {
-        version: env!("CARGO_PKG_VERSION"), base: String::new(),
+        version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
         hostname: hostname(),
         osrelease: read_trim("/proc/sys/kernel/osrelease"),
         clh_version: app.clh.version.clone(),
@@ -1045,9 +1093,9 @@ struct ErrorPage {
     back: String,
 }
 
-fn render_error(message: &str, back: &str) -> Html<String> {
+fn render_error(base_path: &str, message: &str, back: &str) -> Html<String> {
     ErrorPage {
-        version: env!("CARGO_PKG_VERSION"), base: String::new(),
+        version: env!("CARGO_PKG_VERSION"), base: base_path.to_string(),
         message: message.into(),
         back: back.into(),
     }
@@ -1056,12 +1104,12 @@ fn render_error(message: &str, back: &str) -> Html<String> {
     .into()
 }
 
-fn error_page(message: &str, back: &str) -> Html<String> {
-    render_error(message, back)
+fn error_page(app: &AppState, message: &str, back: &str) -> Html<String> {
+    render_error(&app.base_path, message, back)
 }
 
-fn not_found_page(message: &str, back: &str) -> (StatusCode, Html<String>) {
-    (StatusCode::NOT_FOUND, render_error(message, back))
+fn not_found_page(app: &AppState, message: &str, back: &str) -> (StatusCode, Html<String>) {
+    (StatusCode::NOT_FOUND, render_error(&app.base_path, message, back))
 }
 
 // --- focused MS-1 tests ---------------------------------------------------------
@@ -1084,6 +1132,15 @@ mod tests {
         user_token: Option<String>,
         admin_token: Option<String>,
     ) -> Arc<AppState> {
+        test_app_base(tag, user_token, admin_token, String::new())
+    }
+
+    fn test_app_base(
+        tag: &str,
+        user_token: Option<String>,
+        admin_token: Option<String>,
+        base_path: String,
+    ) -> Arc<AppState> {
         let dir = std::env::temp_dir().join(format!("porche-web-test-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -1095,6 +1152,7 @@ mod tests {
             user_token,
             admin_token,
             clh: crate::ClhPin { version: "test".into() },
+            base_path,
         })
     }
 
@@ -1224,5 +1282,96 @@ mod tests {
         assert!(page.contains("sha256:bbbb"), "form missing live image dir");
         assert!(page.contains("kernel 6.18.57"), "manifest metadata not shown");
         assert!(page.contains("volume"), "form missing volume field");
+    }
+
+    // E-30: behind a reverse-proxy prefix, every route, redirect and link
+    // lives under the prefix; the token domains stay strict through it.
+    #[tokio::test]
+    async fn base_prefix_routes_and_auth() {
+        let app = test_app_base(
+            "prefix",
+            Some("user-secret".into()),
+            Some("admin-secret".into()),
+            "/porche/user".into(),
+        );
+        let router = router(app);
+
+        // unauthenticated page under the prefix → 401 page whose form action
+        // and links are prefix-joined
+        let res = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/porche/user/w")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+        let page = body_string(res).await;
+        assert!(page.contains("action=\"/porche/user/w\""), "401 form posts under the prefix");
+
+        // authenticated page under the prefix renders with prefix-joined links
+        let res = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/porche/user/w")
+                    .header(header::AUTHORIZATION, "Bearer user-secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let page = body_string(res).await;
+        assert!(page.contains("href=\"/porche/user/w/new\""), "create link prefix-joined");
+
+        // `?token=` under the prefix redirects back under the prefix
+        let res = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/porche/user/w?token=user-secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::SEE_OTHER);
+        assert_eq!(
+            res.headers().get(header::LOCATION).unwrap(),
+            "/porche/user/w",
+            "token redirect stays under the prefix"
+        );
+
+        // bare prefix redirects to the surface home under the prefix
+        let res = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/porche/user")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::SEE_OTHER);
+        assert_eq!(res.headers().get(header::LOCATION).unwrap(), "/porche/user/w");
+
+        // the admin token still never opens the user surface, prefix or not
+        let res = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/porche/user/w")
+                    .header(header::AUTHORIZATION, "Bearer admin-secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED, "domain split holds behind the prefix");
     }
 }

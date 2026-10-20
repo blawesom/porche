@@ -45,6 +45,12 @@ Both processes need both tokens so that a cross-domain request is answered with
 the contract's strict **401** (not a 404 from the "wrong" binary); `/w` accepts
 ONLY the user token, `/a` ONLY the admin token.
 
+**`--base-path` (E-30)**: behind a reverse proxy the whole tree nests under
+the prefix — `--base-path /porche/user` serves `/porche/user/w`, all page
+links, redirects and the auth cookie `Path` rejoin the prefix, and the
+token-domain 401s are unchanged behind it. Empty (default) = direct loopback
+access.
+
 Reachability is SSH-loopback forward only (copy-runnable):
 
 ```sh
@@ -57,6 +63,13 @@ Any unauthenticated request — on either surface — is answered with a direct
 by submitting the token (GET `?token=` sets the `porche_token` cookie and 303s
 to the clean path) or presenting `Authorization: Bearer <token>` on any page.
 The wrong-domain token is the same strict 401 (UAT negative check `n1`).
+
+**Public HTTPS path (E-30, operator-facing)**: the dev box's HAProxy
+path-routes the consoles over its persistent SSH forward —
+`https://dev.laplane.net/porche/user/` (user surface) and
+`https://dev.laplane.net/porche/admin/` (admin surface). Same tokens, same
+strict 401 domains; TLS terminates at the box's existing cert; the console
+processes still run only on node 1's loopback.
 
 ### UAT (MS-1.M6)
 
