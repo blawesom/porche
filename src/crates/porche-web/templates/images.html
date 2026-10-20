@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block crumb %}Workloads / images{% endblock %}
+{% block meta %}{% endblock %}
+{% block content %}
+<h1>Guest images</h1>
+<p class="subtle">Live platform images on this host ($DATA_DIR/images/) — the create form's
+image select lists exactly these; the full digest is the id used in specs and
+the audit trail.</p>
+{% if images.is_empty() %}
+<p class="subtle">no images — $DATA_DIR/images/ is empty</p>
+{% else %}
+<div class="card">
+  <table>
+    <tr><th>image</th><th>manifest</th></tr>
+    {% for img in images %}
+    <tr>
+      <td><code>{{ img.short }}</code><br><span class="subtle"><code>{{ img.name }}</code></span></td>
+      <td class="subtle">{% if !img.manifest.is_empty() %}{{ img.manifest }}{% else %}no manifest.txt{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+<p><a class="btn link" href="{{ base }}/w/new">→ create a workload with one of these</a></p>
+{% endblock %}

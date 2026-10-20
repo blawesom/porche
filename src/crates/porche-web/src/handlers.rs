@@ -31,11 +31,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/w/volumes/{id}/delete", post(delete_volume))
         .route("/w/{id}", get(workload_detail))
         .route("/w/{id}/console", get(console_tail))
-        .route("/w/{id}/stop", post(stop_workload))
-        .route("/w/{id}/delete", post(delete_workload))
         .route("/a", get(fleet))
         .route("/a/host", get(host_detail))
-        .route("/htmx.js", get(htmx_js));
+        .route("/htmx.js", get(htmx_js))
+        .route("/w/images", get(images));
     let r = r.layer(axum::middleware::from_fn_with_state(
         state.clone(),
         auth_mw,
@@ -294,11 +293,12 @@ struct WorkloadRow {
     can_stop: bool,
     can_delete: bool,
 }
-
-/// Image option row for the create form: dir name (the digest) + manifest
-/// metadata lines when present.
+/// Image option row for the create form: dir name (the digest — the value),
+/// a friendly short id for display, and manifest metadata lines when present.
 struct ImageOpt {
     name: String,
+    /// short display id, e.g. `sha256:962913…` (first 6 hash chars)
+    short: String,
     manifest: String,
     selected: bool,
 }
@@ -307,6 +307,16 @@ fn manifest_lines(dir: &std::path::Path) -> String {
     std::fs::read_to_string(dir.join("manifest.txt"))
         .map(|s| s.lines().collect::<Vec<_>>().join(" · "))
         .unwrap_or_default()
+}
+
+/// `sha256:<64 hex>` → `sha256:<first 10 hex>…`
+fn short_digest(name: &str) -> String {
+    if let Some(h) = name.strip_prefix("sha256:") {
+        if h.len() > 12 {
+            return format!("sha256:{}…", &h[..10]);
+        }
+    }
+    name.to_string()
 }
 
 fn image_options(app: &AppState, selected_for: &str) -> Vec<ImageOpt> {
@@ -323,8 +333,10 @@ fn image_options(app: &AppState, selected_for: &str) -> Vec<ImageOpt> {
         .map(|name| {
             let manifest = manifest_lines(&app.data_dir.join("images").join(&name));
             let selected = name == selected_for;
+            let short = short_digest(&name);
             ImageOpt {
                 name,
+                short,
                 manifest,
                 selected,
             }
@@ -795,6 +807,27 @@ async fn volumes(State(app): State<Arc<AppState>>) -> Html<String> {
     VolumesPage {
         version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
         rows: volume_rows(&app),
+    }
+    .render()
+    .unwrap()
+    .into()
+}
+
+#[derive(Template)]
+#[template(path = "images.html")]
+struct ImagesPage {
+    version: &'static str,
+    base: String,
+    images: Vec<ImageOpt>,
+}
+
+/// `/w/images` — the user-surface image listing (E-30 follow-up: the create
+/// form's select shows a short id; this page carries the full digests).
+async fn images(State(app): State<Arc<AppState>>) -> Html<String> {
+    ImagesPage {
+        version: env!("CARGO_PKG_VERSION"),
+        base: app.base_path.clone(),
+        images: image_options(&app, ""),
     }
     .render()
     .unwrap()

@@ -11,10 +11,10 @@
 <form method="post" action="{{ base }}/w/new">
   <label>id <span class="subtle">([a-z0-9-], ≤10 chars — it names the netns/tap/veth/mapper devices)</span></label>
   <input name="id" value="{{ form.id }}" required>
-  <label>image digest <span class="subtle">(live guest manifest — $DATA_DIR/images/)</span></label>
+  <label>image <span class="subtle">(guest platform image — full digests on the Images tab)</span></label>
   <select name="image_digest" required>
     {% for img in images %}
-    <option value="{{ img.name }}" {% if img.selected %}selected{% endif %}>{{ img.name }}{% if !img.manifest.is_empty() %} — {{ img.manifest }}{% endif %}</option>
+    <option value="{{ img.name }}" {% if img.selected %}selected{% endif %}>{{ img.short }}{% if !img.manifest.is_empty() %} — {{ img.manifest }}{% endif %}</option>
     {% endfor %}
   </select>
   <label>command <span class="subtle">(shell string — the guest runs it once, e.g. <code>printf porche-hello;poweroff -f</code>)</span></label>
