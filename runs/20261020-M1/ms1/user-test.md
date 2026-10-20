@@ -217,15 +217,14 @@ smoke: done (fail=0)
   only executor is `Runner::Shell`; verified in code and by the run's live artifacts).
 
 ```
-operator: <name>            (the person who commissioned and reviewed this record)
+operator: benjamin ble          (the person who commissioned and reviewed this record)
 date: 2026-10-20
 verdict: full user test passed (with the "programmatic driver" boundary stated in the
          Method note above — if a strict human-hand window is needed before a
          production-grade claim, that window is the one named deliverable remaining,
          already templated by this file's step list)
-signature: ________ / 2026-10-20
+signature: benjamin ble / 2026-10-20
 ```
 
-Until this signature block is completed by the operator in their own commit, MS-1's
-status stays **"in progress"** (doc 07 §8.6 contract); the milestone is declared complete
-only when this file commits with that line filled.
+MS-1 is closed by this signature (doc 07 §8.6): the milestone is declared complete
+with this file committed carrying the filled block.
