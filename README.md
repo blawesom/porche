@@ -62,8 +62,5 @@ trust boundaries · **02.3** host virtualization layout · **02.4** encryption k
 | Tree | Content |
 |---|---|
 | `doc/` | the corpus — spec/ (normative) · design/ (informative) · decisions/ (why) · operations/ (procedures) |
-| `src/` | Rust workspace — one binary, role-selected at startup; the host-agent is the PoC role |
-| `guest/` | guest platform image build: pinned kernel + BusyBox + platform init |
-| `harness/` | PoC test harness (doc 07 §7) |
 | `infra/` | integration environment IaC (Outscale — doc 13) |
-| `runs/` | recorded run artifacts + the filled §7.5 results table |
+| `runs/` | recorded run artifacts — the 2026-10-19 miniloop (historical) and every milestone's artifacts (MS-x/) |

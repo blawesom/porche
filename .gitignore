@@ -1,13 +1,5 @@
-# Rust build artifacts
-/src/target/
-
-# local scratch
+# local scratch, guest/TF build artifacts
 *.swp
 *.log
-
-# guest build artifacts
-guest/dl/
-guest/out/
-guest/bin/inspect/target/
 infra/integration/tfplan-bsu
 infra/integration/tfplan-links

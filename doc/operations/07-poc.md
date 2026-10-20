@@ -1,6 +1,6 @@
 # 07 — PoC Scope (pre-P0)
 
-Working document — v9, 2026-10-19. **v2**: live migration explicitly deferred (v1 goal,
+Working document — v10, 2026-10-20. **v2**: live migration explicitly deferred (v1 goal,
 not PoC scope — E-3). **v3 (E-4)**: PoC re-targeted to **direct Cloud Hypervisor
 orchestration** — no containerd, no Kata. **v4 (E-5)**: PoC host = **Fedora CoreOS,
 stable stream** — the tracked upstream. **v5 (E-6/E-7)**: wipe = crypto-erase only;
@@ -14,8 +14,10 @@ samples, thresholds, wipe probe, baseline toggles, results template; the harness
 on node 1's Rocky interim, the recorded PoC runs on the FCOS OMI (E-5 unchanged —
 sequencing, not scope). **v9 (implementation plan, 2026-10-19)**: §7.4 escape artifact
 policy decided (**hybrid**); §8 opened — repository layout (E-27), workstreams
-WS-A..WS-F, burst-mode sequencing, ratified defaults (§8.4). Defines the **first proof of
-concept**: the smallest buildable system that validates the riskiest technical bets of
+WS-A..WS-F, burst-mode sequencing, ratified defaults (§8.4). **v10 (2026-10-20,
+E-29)**: rollback to corpus-only; re-entry is milestone-based (§8.6): MS-1 = PoC stack +
+user/admin consoles + full user test. §8 restructured: §8.5 = proven evidence only, §8.6 =
+milestone ledger + milestone rule. Defines the **first proof of concept**: the smallest buildable system that validates the riskiest technical bets of
 the design. Everything not listed in scope is **deferred by decision**, not forgotten —
 see §3.
 
@@ -209,7 +211,9 @@ when the table is green — or a §6 kill criterion fired.
 ## 8. Implementation plan (opened with the build, 2026-10-19)
 
 The working plan the implementation follows; §1–§7 remain the contract. Status lives in
-§8.5 and is updated as workstreams complete.
+§8.5 and is updated as workstreams complete. As of E-29 the implementation trees exist in
+git history (pin `f649f15`) and MS-1 may consult that spec/history for contract facts (the
+gap rule of §8.6); §8.1–§8.4 remain the ratified layout/plan for the re-entry trees.
 
 ### 8.1 Repository layout (E-27)
 
@@ -263,12 +267,57 @@ node happens locally.
 | Workstream | State |
 |---|---|
 | repo restructure (E-27) | done 2026-10-19 |
-| WS-A | **done 2026-10-19** — node 1 PoC-ready (interim Rocky 9.4; recorded run still FCOS per §7.1): CLH v54.0 digest-pinned, all four SEC-11 sysctls asserted, modules warmed **and verified** before `modules_disabled` seals, `/var/lib/porche` on the 200 GB BSU region (ext4, discard) |
-| WS-B | **done 2026-10-19** — kernel 6.18.57 **bzImage** (vmlinux lacks the PVH header CLH wants; bzImage boots via the Linux boot protocol) + BusyBox rootfs + platform init, digest-pinned, installed on node |
-| WS-C | **first full cycle green 2026-10-19** — create → `porche.ready` → `porche.done rc=0` → poweroff; wipe report all-pass (319 ms); CLH v54 API contract pinned on the node (payload strings, net sequence, serial `{mode,file}`, memory bytes, disk `image_type: Raw`, Content-Length HTTP reads, real TUN/TAP in-netns bridge + netdev anti-spoof). Residual: create ≈ 8–9 s (Argon2id luksFormat dominates — PERF-1 must account for KDF cost) |
-| WS-D | **exercised 2026-10-19** — 5-cycle stability loop on node: no wedge, no residue, teardown P50 1.33 s / P99 1.33 s (§7.5-mini PASS); boot-time + density scripts ready, not yet run at §7.2 scale |
-| WS-E | not started (after WS-C/D at scale) |
-| WS-F | not started (FCOS OMI → recorded run) |
-| **UX MVP (E-28)** | **console-host `porche-web` built + deployed 2026-10-19** — both surfaces over the PoC adapter (doc 09 §Console, doc 12 §9): workloads list/create/detail (console-tab poll), stop, **DeleteWorkload → wipe-report page**, admin fleet-of-one + audit stream; 7 unit tests + full dry-mode cycle verified. **Live at `dev.laplane.net/porche/user` + `/porche/admin`** (systemd + HAProxy, tokens, dry mode — `deploy/README.md`). **Live-mode node demo deferred** — the gen-7 metal pool in eu-west-2a went `InsufficientCapacity` mid-burst (also the StartVms-504 root cause, doc 13 §4); runs when capacity returns |
+| WS-A | **rolled back 2026-10-20 (E-29)** — what was proven: node 1 PoC-ready on the interim image |
+| WS-B | **rolled back 2026-10-20 (E-29)** — what was proven: guest image booting with `porche.ready` + manifest digests |
+| WS-C | **rolled back 2026-10-20 (E-29)** — what was proven: first create→`porche.ready`→`porche.done rc=0`→poweroff→wipe cycle + 5-cycle loop (`runs/20261019-1201-miniloop/`; evidence kept) |
+| WS-D | **rolled back 2026-10-20 (E-29)** — what was proven: create ≈ 8–9 s measured (Argon2id `luksFormat`) — drove the MS-1 KDF step |
+| WS-E | **not started — pending at rollback (E-29)** — enters at MS-3 |
+| WS-F | **not started — pending at rollback (E-29)** — enters at MS-4 |
+| **UX MVP (E-28)** | **built + deployed (dry-mode only) — rolled back 2026-10-20 (E-29)**; consoles return at MS-1 live on node 1 |
+
+Datapoints (recorded 2026-10-19; kept as wire-dated evidence alongside the rolled-back rows):
+
+| Datapoint | Observed |
+|---|---|
+| create | ≈ 8–9 s/cycle (Argon2id `luksFormat` dominates) |
+| teardown ± probe | P50 1325 ms / P99 1328 ms |
+| single wipe | ≈ 320 ms (commit claims 319 ms — no machine artifact; see §8.6 MS-1 wipe step) |
+| memory drift | ≈ 0.05 % over 5 cycles |
+| wipes | 5/5 (probe surface only) |
+| sysctls | 4/4 |
+
+Solid measurement at §7.2 scale arrives via MS-2.
 
 First-run artifacts: `runs/20261019-1201-miniloop/` (fixtures + results).
+
+### 8.6 Re-entry milestones (E-29)
+
+**Milestone rule (binding)**: a milestone is one gated window whose build is pinned onto
+the running system, with a small internal build order; the milestone is not complete until
+a **full user test** is executed and recorded — every page and every operation a human
+exercises of that milestone's surfaces, through a real browser, over the live path. Machine
+checks are backstops only, never the pass criterion. Multi-day complex steps that cross two
+days become MS-x.1 and MS-x.2 where each window has its own user test (the web UI `--dry`
+stand-in exists on NO milestone: there are no `--dry` surfaces, ever).
+
+**Gap rule (binding on all re-entry work)**: clear gaps and artifacts — any specimen you
+wish to make later claims about that is not live and observable must not be claimed; if it
+comes from history/spec you may consult it, but if you would verify it live do so before
+writing it; artifacts only the running one can answer stay inside; delete as a broken
+gamble any claim you cannot connect to that signal.
+
+**Artifact rule**: for every small step run, store the artifacts under
+`runs/<run-id>/<milestone>/`; the name carries the step; the artifacts are the machine's
+eyes.
+
+| # | Milestone | Scope locked to | Exit (committed artifacts; user test language) | Status |
+|---|---|---|---|---|
+| MS-1 | **PoC stack + consoles + full user test** | three §1 bets via the create/wipe path (KDF spike → guest image → create half → wipe half); both web UIs live on node 1 over the PoC adapter | data-plane run dirs under `runs/<id>/ms1/` + `user-test.md` + `uat/` screenshots + regression smoke recorded | in progress |
+| MS-2 | scale harness (WS-D) | PERF-1 n=100, PERF-5 n=20, PERF-8 1,000-cycle **gate**, drift/wedge/wipe-probe checks | filled §7.5 rows + CSVs/console logs; user test = the harness web/walkthrough covering the new results page (if surfaced) or the run report | pending |
+| MS-3 | escape delta (WS-E) | 3 classes × hardened/baseline (§7.3), §7.4 safety, delta verdicts only (E-18) | per-class paired run artifacts; user test = operator walk of the delta report | pending |
+| MS-4 | recorded run (WS-F) | FCOS stable OMI (doc 13 §8); full suite | the §7.5 record complete; user test = the record's sign-off walk | pending |
+| MS-5+ | console/object growth per doc 09's map (audit view, tokens, volumes CRUD, deeper topology) | enters only inside a milestone window; its user test covers the new surface alongside existing flows | updated `user-test.md` per milestone | pending |
+
+"User test language" in every row means the recorded human UAT covers **every page and
+every operation** of the surfaces that milestone touches (the MS-1 user-test order is
+fixed at the run and committed as `user-test.md`, and it reappears per milestone).

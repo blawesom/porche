@@ -161,7 +161,8 @@ Region `eu-west-2`; subregion `eu-west-2a`. Credentials: local `~/.osc/config.js
     group booted in 20 s — capacity was fine). VMs **boot reliably at creation**;
     a **guest reboot** (`systemctl reboot`) retains the physical server. Rule: never
     stop the node mid-burst; teardown = stop (accepting recreation cost) — the node
-    is reproducible in ~5 min (`harness/node-setup.sh` + bundle).
+    is reproducible in ~5 min (`harness/node-setup.sh` + bundle; recipe removed at the
+    2026-10-20 rollback (E-29); rebuilt by MS-1's node step).
 14. **TF applies touching VM-linked resources were unreliable during the 2026-10-19
     burst** (one stopped the node despite `env_running=true`; link applies hung).
     The working links were made directly via `octl` (`LinkVolume`, `LinkPublicIp`).
@@ -199,7 +200,7 @@ control plane:
 | Resource | ID | Status |
 |---|---|---|
 | Dedicated group `Test1` | `ded-53c8318b` (eu-west-2a, gen 7) | pre-existing, in use |
-| Metal node 1 | `i-b48c9483` (`tinav7.c8r16p1`, nested virt, keypair `porche-integ2`, key injected via UserData — §4.12) | **PoC-ready**, stopped at burst end (§4.13: recreation = `harness/node-setup.sh` + bundle, ~5 min) |
+| Metal node 1 | `i-b48c9483` (`tinav7.c8r16p1`, nested virt, keypair `porche-integ2`, key injected via UserData — §4.12) | **PoC-ready**, stopped at burst end (§4.13: recreation = `harness/node-setup.sh` + bundle, ~5 min; recipe removed at the 2026-10-20 rollback (E-29); rebuilt by MS-1's node step) |
 | Node 1 public IP | `eipalloc-84925ae5` (`148.253.126.10`) | linked to `i-b48c9483` (via octl) |
 | Node 1 second BSU | `vol-ad0f8082` (200 GB gp2) | linked (via octl); ext4 `porche-nvme` label, mounted `/var/lib/porche` with discard — the tier-E volume region |
 | SG `porche-integ-sg` | `sg-ba94b9e2` | SSH rule **extended**: `171.33.93.229/32` (current office egress, 2026-10-19) |
@@ -210,7 +211,8 @@ control plane:
 | NFS VM, control-plane VM | — | not provisioned (recipe §5) |
 | Canary VM | `i-b57d5cda` (`tinav7.c2r2p1`) | **deleted** 2026-10-19 (allocation probe — §4.13) |
 
-Node 1 PoC state (all applied by `harness/node-setup.sh`): CLH v54.0
+Node 1 PoC state (all applied by `harness/node-setup.sh`; recipe removed at the
+2026-10-20 rollback (E-29); rebuilt by MS-1's node step): CLH v54.0
 (sha256-pinned), SEC-11 sysctls asserted, modules `bridge/veth/nf_tables/dm_mod/
 dm_crypt/loop/tun` warmed and verified before `modules_disabled=1`, `brporche`
 bridge, platform image + specs under `/root/poc/`, host-agent at
