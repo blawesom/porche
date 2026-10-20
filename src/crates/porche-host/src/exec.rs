@@ -186,7 +186,9 @@ impl Executor for DirectExecutor {
             },
             tap: netns::tap_name(&spec.id),
             mac: spec.assigned_mac(),
-            offloads_off: true, // SEC-7: default for untrusted workloads
+            // SEC-7 hardened default. PORCHE_ESCAPE_BASELINE=1 flips offloads ON
+            // for the E-18 unhardened baseline delta run — never set in production.
+            offloads_off: std::env::var("PORCHE_ESCAPE_BASELINE").ok().as_deref() != Some("1"),
             console_log: console.display().to_string(),
         };
 
