@@ -1,0 +1,3 @@
+kernel.io_uring_disabled = 0
+user.max_user_namespaces = 63183
+kernel.modules_disabled = 1

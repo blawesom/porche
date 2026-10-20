@@ -1,0 +1,1 @@
+io_uring_setup(nobody+params): ALLOWED (fd 3) — corrected probe (params ptr, not NULL; the EFAULT was the probe artifact)

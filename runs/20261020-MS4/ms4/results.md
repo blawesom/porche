@@ -41,8 +41,20 @@ outcome", never an absolute-security claim.
 
 ## Class 3 — 2026 page-cache/userns kernel cluster (SEC-11)
 
-(pending — hardened = the node's sealed sysctls; baseline = stock defaults;
-requires one node reboot, batched last)
+(both legs on the same boot — the sysctls flip at runtime; only modules_disabled
+is one-way and it stayed 1 throughout. Hardened = sealed state
+io_uring_disabled=2 / max_user_namespaces=0; baseline = stock 0 / 63183.)
+
+- probes (unprivileged `nobody`, host-side): `io_uring_setup` syscall —
+  hardened **DENIED (EPERM)** vs baseline **ALLOWED (fd 3)** (one probe
+  artifact corrected and recorded: NULL params gives EFAULT regardless of
+  policy; the corrected probe with a real struct shows the true baseline).
+  `unshare -Ur` — hardened **DENIED (ENOSPC, the max_user_namespaces=0
+  form)** vs baseline **ALLOWED (mapped root)**.
+- **DELTA: present** — both 2026 attack primitives closed under the sealed
+  sysctls, open under stock defaults. Node re-sealed and verified after the
+  baseline leg.
+- raw: `c3/` (per-leg sysctl states, probe outputs, corrected-probe record)
 
 ## Harness defects found and fixed during this class (record)
 

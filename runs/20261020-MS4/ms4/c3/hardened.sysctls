@@ -1,0 +1,7 @@
+== leg: hardened ==
+kernel.io_uring_disabled = 2
+user.max_user_namespaces = 0
+kernel.core_pattern = core
+kernel.modules_disabled = 1
+/tmp/ms4-sysctl-delta.sh: line 48: gcc: command not found
+gcc missing — using python ctypes

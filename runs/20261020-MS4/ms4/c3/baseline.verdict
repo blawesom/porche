@@ -1,0 +1,2 @@
+io_uring: ALLOWED (fd 3, corrected probe — params pointer required; NULL gave EFAULT not policy)
+userns:   userns: ALLOWED (mapped root)
