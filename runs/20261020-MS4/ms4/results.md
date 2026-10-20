@@ -72,3 +72,19 @@ io_uring_disabled=2 / max_user_namespaces=0; baseline = stock 0 / 63183.)
    absolute `/usr/local/bin/` path); missing `/api/v1` prefix on the CLH
    HTTP API; missing `vm.boot` after `vm.create`; two net ifaces cannot share
    one tap ("Resource busy") — the baseline's second iface needs its own tap.
+
+## Verdict & signature
+
+- **every verdict backed by paired machine artifacts** — yes (c1/c2/c3: consoles,
+  tap-offload states, vm.info, per-leg sysctl states, probe outputs).
+- **delta verdicts only** — yes (E-18 honored throughout; no absolute-security
+  claims anywhere in this record).
+- **user test: the operator walked the delta report** — yes (operator read
+  results.md + the three class records, 2026-10-20, verdict "read and ok").
+
+```
+operator: benjamin ble
+date: 2026-10-20
+verdict: full user test passed
+signature: benjamin ble / 2026-10-20
+```
