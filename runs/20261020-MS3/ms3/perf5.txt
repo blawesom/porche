@@ -1,0 +1,2 @@
+== PERF-5: 20 parallel VMs, RSS sampler, 10 min steady ==
+max per-VM RSS: 107996 kB (threshold < 204800kB)

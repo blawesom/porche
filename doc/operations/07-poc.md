@@ -189,13 +189,13 @@ VMs' guests; full real-PoC artifacts move to the metal run / SEC-40.
 
 | Criterion | Method | n | Threshold | Measured | Verdict |
 |---|---|---|---|---|---|
-| PERF-1 (smoke) | console marker | 100 | P50 < 1.5 s | | |
-| PERF-5 (smoke) | RSS sampler | 20 | < 200 MB each | | |
-| PERF-8 loop (**gate**) | create/wipe | 1,000 | no wedge, < 5 % drift | | |
-| PERF-8 timing (smoke) | per-cycle | 1,000 | P99 < 2 s | | |
-| Wipe probe | markers + key slots | all | no recoverable data | | |
-| Escape delta | §7.3 toggles | 3 | delta present | | |
-| Sysctl script | boot assert | every boot | all pass | | |
+| PERF-1 (smoke) | console marker | 100 | P50 < 1.5 s | P50 1495 ms, P99 1511 ms | **pass** (`20261020-MS3`) |
+| PERF-5 (smoke) | RSS sampler | 20 | < 200 MB each | max 105 MB | **pass** (`20261020-MS3`) |
+| PERF-8 loop (**gate**) | create/wipe | 1,000 | no wedge, < 5 % drift | 0 wedge, 0.85 % drift | **pass** (`20261020-MS3`) |
+| PERF-8 timing (smoke) | per-cycle | 1,000 | P99 < 2 s | P50 329 ms, P99 355 ms | **pass** (`20261020-MS3`) |
+| Wipe probe | markers + key slots | all (1,000) | no recoverable data | 0 probe failures | **pass** (`20261020-MS3`) |
+| Escape delta | §7.3 toggles | 3 | delta present | — | **pending MS-4** |
+| Sysctl script | boot assert | every boot | all pass | | every boot asserted (§4.13 node recipe; `20261020-MS3` boot included) |
 
 The filled table plus the §7.1 fixture record is committed with the run; the PoC is done
 when the table is green — or a §6 kill criterion fired.

@@ -1,0 +1,2 @@
+== PERF-1: create→ready, 10 warmups + 100 samples ==
+n=100 P50=1495ms P99=1511ms (thresholds: P50<1500 P99<5000)
