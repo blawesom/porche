@@ -54,3 +54,17 @@ claim is metal-only, E-16.)
 | PERF-8 loop (**gate**) | create/wipe | 1,000 | no wedge, < 5 % drift | 0 wedge, 0.85 % drift | **pass** |
 | PERF-8 timing (smoke) | per-cycle | 1,000 | P99 < 2 s | P50 329 ms / P99 355 ms | **pass** |
 | Wipe probe | markers + key slots | all (1,000) | no recoverable data | 0 probe failures | **pass** |
+
+## Verdict & signature
+
+- **every row backed by machine artifacts** — yes (CSVs, sorted series, harness
+  output, wedge log — all committed in this run dir).
+- **user test: the operator walked the results report** — yes (operator reviewed
+  results.md + §7.5 + the raw CSVs, 2026-10-20, verbal verdict "ok good").
+
+```
+operator: benjamin ble
+date: 2026-10-20
+verdict: full user test passed
+signature: benjamin ble / 2026-10-20
+```
