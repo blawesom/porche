@@ -123,9 +123,9 @@ mod tests {
     use crate::spec::{VolumeSpec, WorkloadState};
     use crate::store::SqliteStore;
     use std::cell::RefCell;
-
     fn spec(id: &str) -> WorkloadSpec {
         WorkloadSpec {
+            tenant_id: crate::spec::default_tenant(),
             id: id.into(),
             image_digest: format!("sha256:{}", "c".repeat(64)),
             command: "true".into(),

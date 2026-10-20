@@ -9,7 +9,7 @@ use crate::audit::epoch_utc;
 use crate::state::*;
 use crate::AppState;
 use askama::Template;
-use axum::extract::{Form, Path, State};
+use axum::extract::{Extension, Form, Path, State};
 use axum::http::{header, HeaderMap, Request, StatusCode};
 use axum::middleware::Next;
 use axum::response::{Html, IntoResponse, Redirect, Response};
@@ -120,9 +120,17 @@ fn request_auth(req: &Request<axum::body::Body>, user: Option<&str>, admin: Opti
     }
 }
 
+/// The authenticated tenant on a user-surface request (MS-2, E-31.2): the
+/// token that matched the user domain maps to exactly one tenant scope.
+/// `t0` is the legacy single-tenant scope.
+#[derive(Clone, Debug)]
+pub struct TenantCtx {
+    pub tenant_id: String,
+}
+
 async fn auth_mw(
     State(app): State<Arc<AppState>>,
-    req: Request<axum::body::Body>,
+    mut req: Request<axum::body::Body>,
     next: Next,
 ) -> Response {
     // E-30: the prefix is handled by `Router::nest` in `router()` (it strips
@@ -141,12 +149,22 @@ async fn auth_mw(
     let user_want = app.user_token.as_deref();
     let admin_want = app.admin_token.as_deref();
 
+    // MS-2: a user-domain request authenticates by ANY tenant token (or the
+    // legacy user token = t0). The matched token fixes the tenant scope.
+    let tenant_of_token = |tok: &str| -> Option<String> {
+        app.tenants
+            .iter()
+            .find(|(_, t)| t == tok)
+            .map(|(tid, _)| tid.clone())
+    };
+
     // one-time `?token=` → set the cookie, 303 to the clean path (E-28 kept
     // mechanism). A query token of the WRONG domain matches nothing and falls
     // through to the strict 401 — a user token never opens `/a` and vice
     // versa (the split is by configured value; the UAT tokens are distinct).
     if let Some(qt) = query_token(&req) {
-        let is_user = user_want == Some(qt.as_str());
+        let is_user = user_want == Some(qt.as_str())
+            || (domain == Domain::User && tenant_of_token(&qt).is_some());
         let is_admin = admin_want == Some(qt.as_str());
         let ok = match domain {
             Domain::User => is_user,
@@ -158,11 +176,29 @@ async fn auth_mw(
     }
 
     let auth = request_auth(&req, user_want, admin_want);
+    let tenant_scope: Option<Option<String>> = match domain {
+        Domain::User => {
+            // resolve the tenant from whichever credential matched
+            let cred = extract_credential(&req);
+            let scope = cred.as_deref().and_then(|c| {
+                if user_want == Some(c) {
+                    Some("t0".to_string()) // legacy single-tenant token
+                } else {
+                    tenant_of_token(c)
+                }
+            });
+            Some(scope)
+        }
+        Domain::Admin => None,
+    };
     let ok = match domain {
-        Domain::User => auth.user,
+        Domain::User => auth.user || tenant_scope.as_ref().is_some_and(|s| s.is_some()),
         Domain::Admin => auth.admin,
     };
     if ok {
+        if let Some(Some(tid)) = tenant_scope {
+            req.extensions_mut().insert(TenantCtx { tenant_id: tid });
+        }
         let res = next.run(req).await;
         return rejoin_prefix(res, &bp);
     }
@@ -180,6 +216,27 @@ async fn auth_mw(
         )
             .into_response()
     }
+}
+
+/// The presented credential (Bearer token, else the cookie value) — used to
+/// resolve the tenant scope. Returns None when no credential is present.
+fn extract_credential(req: &Request<axum::body::Body>) -> Option<String> {
+    if let Some(v) = req
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+    {
+        return Some(v.to_string());
+    }
+    req.headers()
+        .get(header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|c| {
+            c.split(';').find_map(|p| {
+                p.trim().strip_prefix("porche_token=").map(|v| v.to_string())
+            })
+        })
 }
 
 /// Set the cookie and 303 to the clean path. One cookie name, one domain's
@@ -379,8 +436,23 @@ struct WorkloadsPage {
     records: Vec<WorkloadRow>,
 }
 
-async fn workloads(State(app): State<Arc<AppState>>) -> Html<String> {
-    let records = app.store.list().unwrap_or_default();
+/// Tenant context extractor for handlers — the user surface is ALWAYS
+/// tenant-scoped (MS-2 view isolation). A missing context (route reached
+/// without the middleware — a bug) fails closed as t0 rather than open.
+fn tenant_ctx(req: &axum::http::Request<axum::body::Body>) -> TenantCtx {
+    req.extensions()
+        .get::<TenantCtx>()
+        .cloned()
+        .unwrap_or(TenantCtx {
+            tenant_id: "t0".into(),
+        })
+}
+async fn workloads(
+    State(app): State<Arc<AppState>>,
+    Extension(t): Extension<TenantCtx>,
+) -> Html<String> {
+let t = t;
+    let records = app.store.list_for_tenant(&t.tenant_id).unwrap_or_default();
     let rows = records.iter().map(|r| row_of(&app, r)).collect();
     WorkloadsPage {
         version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
@@ -445,9 +517,11 @@ struct CreateForm {
 async fn create_submit(
     State(app): State<Arc<AppState>>,
     headers: HeaderMap,
+    Extension(t): Extension<TenantCtx>,
     Form(form): Form<CreateForm>,
 ) -> Response {
     let actor = actor_of(&headers);
+let t = t;
 
     let vals = FormVals {
         id: form.id.clone(),
@@ -460,13 +534,15 @@ async fn create_submit(
     };
 
     // reject duplicate ids up front — the store's upsert would replace a row
+    // (duplicate check is tenant-global: workload ids are host-global device
+    // names — two tenants cannot both claim netns w-foo)
     let pre = match app.store.get(form.id.trim()) {
         Ok(Some(_)) => Some(format!("workload {:?} already exists", form.id.trim())),
         Ok(None) => None,
         Err(e) => Some(format!("store: {e}")),
     };
 
-    let spec = pre.map(Err).unwrap_or_else(|| build_spec(&form));
+    let spec = pre.map(Err).unwrap_or_else(|| build_spec(&form, &t.tenant_id));
     match spec {
         Ok(spec) => {
             // validate BEFORE the synchronous pre-persist: an invalid spec must
@@ -544,7 +620,7 @@ async fn create_submit(
     }
 }
 
-fn build_spec(form: &CreateForm) -> Result<WorkloadSpec, String> {
+fn build_spec(form: &CreateForm, tenant_id: &str) -> Result<WorkloadSpec, String> {
     let vcpu: u32 = form
         .vcpu
         .trim()
@@ -567,6 +643,7 @@ fn build_spec(form: &CreateForm) -> Result<WorkloadSpec, String> {
         })
     };
     Ok(WorkloadSpec {
+        tenant_id: tenant_id.to_string(),
         id: form.id.trim().to_string(),
         image_digest: form.image_digest.trim().to_string(),
         command: form.command.clone(),
@@ -602,8 +679,10 @@ struct WorkloadDetailPage {
 async fn workload_detail(
     State(app): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Extension(t): Extension<TenantCtx>,
 ) -> Response {
-    match app.store.get(&id) {
+let t = t;
+    match app.store.get_for_tenant(&t.tenant_id, &id) {
         Ok(Some(r)) => {
             let console = read_console(&app.data_dir, &id);
             let log_mtime = std::fs::metadata(console_path(&app.data_dir, &id))
@@ -653,9 +732,20 @@ struct ConsoleTail {
     lines: Vec<String>,
 }
 
-async fn console_tail(State(app): State<Arc<AppState>>, Path(id): Path<String>) -> Html<String> {
-    // GetConsole — the recorded serial log tail (MS-1: recorded half)
-    let text = read_console(&app.data_dir, &id);
+async fn console_tail(
+    State(app): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Extension(t): Extension<TenantCtx>,
+) -> Html<String> {
+    // GetConsole — the recorded serial log tail (MS-1: recorded half).
+    // Tenant-scoped: a cross-tenant id returns an empty tail, never another
+    // tenant's serial log.
+let t = t;
+    let text = if app.store.get_for_tenant(&t.tenant_id, &id).ok().flatten().is_some() {
+        read_console(&app.data_dir, &id)
+    } else {
+        String::new()
+    };
     let mut lines: Vec<String> = text.lines().rev().take(40).map(String::from).collect();
     lines.reverse();
     ConsoleTail { lines }.render().unwrap().into()
@@ -665,8 +755,14 @@ async fn stop_workload(
     State(app): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(id): Path<String>,
+    Extension(t): Extension<TenantCtx>,
 ) -> Response {
     let actor = actor_of(&headers);
+    // tenant gate BEFORE the stop: a cross-tenant stop must be a 404
+let t = t;
+    if app.store.get_for_tenant(&t.tenant_id, &id).ok().flatten().is_none() {
+        return not_found_page(&app, &format!("workload not found: {id}"), "/w").into_response();
+    }
     let id2 = id.clone();
     let app2 = app.clone();
     let result = tokio::task::spawn_blocking(move || {
@@ -732,10 +828,17 @@ async fn delete_workload(
     State(app): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(id): Path<String>,
+    Extension(t): Extension<TenantCtx>,
 ) -> Response {
     // DeleteWorkload is an operation (doc 09 conventions): teardown with the
     // reported wipe — the report is the page.
     let actor = actor_of(&headers);
+    // tenant gate BEFORE the wipe: a cross-tenant delete must be a 404, never
+    // a wipe of another tenant's workload
+let t = t;
+    if app.store.get_for_tenant(&t.tenant_id, &id).ok().flatten().is_none() {
+        return not_found_page(&app, &format!("workload not found: {id}"), "/w").into_response();
+    }
     let id2 = id.clone();
     let app2 = app.clone();
     let result = tokio::task::spawn_blocking(move || {
@@ -769,8 +872,8 @@ struct VolumeRow {
     attached_label: String,
 }
 
-fn volume_rows(app: &AppState) -> Vec<VolumeRow> {
-    let records = app.store.list().unwrap_or_default();
+fn volume_rows(app: &AppState, tenant_id: &str) -> Vec<VolumeRow> {
+    let records = app.store.list_for_tenant(tenant_id).unwrap_or_default();
     let mut rows: Vec<VolumeRow> = records
         .iter()
         .filter(|r| r.spec.volume.is_some())
@@ -803,10 +906,14 @@ struct VolumesPage {
     rows: Vec<VolumeRow>,
 }
 
-async fn volumes(State(app): State<Arc<AppState>>) -> Html<String> {
+async fn volumes(
+    State(app): State<Arc<AppState>>,
+    Extension(t): Extension<TenantCtx>,
+) -> Html<String> {
+let t = t;
     VolumesPage {
         version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
-        rows: volume_rows(&app),
+        rows: volume_rows(&app, &t.tenant_id),
     }
     .render()
     .unwrap()
@@ -844,9 +951,14 @@ struct VolumeDetailPage {
     updated: String,
 }
 
-async fn volume_detail(State(app): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
-    let row = volume_rows(&app).into_iter().find(|v| v.id == id);
-    let rec = app.store.get(&id).ok().flatten();
+async fn volume_detail(
+    State(app): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Extension(t): Extension<TenantCtx>,
+) -> Response {
+let t = t;
+    let row = volume_rows(&app, &t.tenant_id).into_iter().find(|v| v.id == id);
+    let rec = app.store.get_for_tenant(&t.tenant_id, &id).ok().flatten();
     match (row, rec) {
         (Some(row), Some(r)) => Html(VolumeDetailPage {
             version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
@@ -866,12 +978,23 @@ async fn delete_volume(
     State(app): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(id): Path<String>,
+    Extension(t): Extension<TenantCtx>,
 ) -> Response {
     // DeleteVolume goes through the workload's wipe path (the volume file, its
     // mapper and its DEK die together — never the volume alone) and renders the
     // same wipe report. Volumes have no separate CRUD in MS-1 (doc 09 §1 bet:
     // the attach+wipe path).
     let actor = actor_of(&headers);
+    // tenant gate BEFORE the wipe: a cross-tenant delete must be a 404, never
+    // a wipe of another tenant's volume
+let t = t;
+    match app.store.get_for_tenant(&t.tenant_id, &id) {
+        Ok(Some(_)) => {}
+        _ => {
+            return not_found_page(&app, &format!("volume not found: {id}"), "/w/volumes")
+                .into_response()
+        }
+    }
     let id2 = id.clone();
     let app2 = app.clone();
     let result = tokio::task::spawn_blocking(move || {
@@ -1168,16 +1291,28 @@ mod tests {
         test_app_base(tag, user_token, admin_token, String::new())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn test_app_base(
         tag: &str,
         user_token: Option<String>,
         admin_token: Option<String>,
         base_path: String,
     ) -> Arc<AppState> {
+        test_app_full(tag, user_token, admin_token, base_path, Vec::new())
+    }
+
+    fn test_app_full(
+        tag: &str,
+        user_token: Option<String>,
+        admin_token: Option<String>,
+        base_path: String,
+        tenants: Vec<(String, String)>,
+    ) -> Arc<AppState> {
         let dir = std::env::temp_dir().join(format!("porche-web-test-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         Arc::new(AppState {
+            tenants,
             store: porche_core::SqliteStore::open(dir.join("store.sqlite3")).unwrap(),
             exec: std::sync::Mutex::new(DirectExecutor::new(Runner::Shell, &dir, dir.join("keys.json"))),
             data_dir: dir.clone(),
@@ -1187,6 +1322,20 @@ mod tests {
             clh: crate::ClhPin { version: "test".into() },
             base_path,
         })
+    }
+
+    fn spec_for_test(id: &str) -> porche_core::WorkloadSpec {
+        porche_core::WorkloadSpec {
+            tenant_id: "t0".into(),
+            id: id.into(),
+            image_digest: format!("sha256:{}", "b".repeat(64)),
+            command: "true".into(),
+            vcpu: 1,
+            ram_mib: 64,
+            volume: Some(porche_core::VolumeSpec { size_mib: 8 }),
+            ip6: "fd00::1".into(),
+            gw6: "fd00::ff".into(),
+        }
     }
 
     async fn body_string(res: Response) -> String {
@@ -1406,5 +1555,108 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED, "domain split holds behind the prefix");
+    }
+
+    // MS-2: two tenants — a tenant token lists only its workloads; a
+    // cross-tenant detail is a 404 (never a leak); the admin surface still
+    // sees all rows; a tenant token never opens /a.
+    #[tokio::test]
+    async fn tenant_view_isolation() {
+        let app = test_app_full(
+            "tenants",
+            None, // no legacy user token: tenants are the only user credentials
+            Some("admin-secret".into()),
+            String::new(),
+            vec![
+                ("t0".into(), "tok-t0".into()),
+                ("t1".into(), "tok-t1".into()),
+            ],
+        );
+        // two workloads, one per tenant
+        for (tid, wid) in [("t0", "wa"), ("t1", "wb")] {
+            let mut s = spec_for_test(wid);
+            s.tenant_id = tid.into();
+            app.store
+                .upsert(&s, &porche_core::WorkloadState::Running)
+                .unwrap();
+        }
+        let router = router(app.clone());
+
+        // t0 lists only wa
+        let res = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/w")
+                    .header(header::AUTHORIZATION, "Bearer tok-t0")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let page = body_string(res).await;
+        assert!(page.contains("wa"), "t0 must see its own workload");
+        assert!(!page.contains("wb"), "t0 must NOT see t1's workload");
+
+        // t0 asking t1's detail → 404 (not a 403 leak)
+        let res = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/w/wb")
+                    .header(header::AUTHORIZATION, "Bearer tok-t0")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND, "cross-tenant detail must 404");
+
+        // t1's console tail of wa → empty (no cross-tenant serial leak)
+        let res = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/w/wa/console")
+                    .header(header::AUTHORIZATION, "Bearer tok-t1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let page = body_string(res).await;
+        assert!(!page.contains("porche.ready"), "cross-tenant console must be empty");
+
+        // a tenant token never opens /a
+        let res = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/a")
+                    .header(header::AUTHORIZATION, "Bearer tok-t0")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED, "tenant token must never open /a");
+
+        // admin still sees every row (allocations span tenants)
+        let res = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/a")
+                    .header(header::AUTHORIZATION, "Bearer admin-secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let page = body_string(res).await;
+        assert!(page.contains("wa") && page.contains("wb"), "admin sees all tenants");
     }
 }

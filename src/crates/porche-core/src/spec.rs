@@ -13,9 +13,19 @@ pub struct VolumeSpec {
     pub size_mib: u32,
 }
 
-/// The PoC workload spec — exactly doc 07 §2's "workload spec" row.
+/// The legacy single-tenant id — pre-MS-2 rows and CLI specs default here.
+pub fn default_tenant() -> String {
+    "t0".into()
+}
+
+/// The PoC workload spec — exactly doc 07 §2's "workload spec" row, plus the
+/// MS-2 tenancy slice: `tenant_id` (owner; E-31.2).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkloadSpec {
+    /// Owning tenant (MS-2). Defaults on read for pre-MS-2 rows — the legacy
+    /// single-tenant corpus migrates to `t0` without a store rewrite.
+    #[serde(default = "default_tenant")]
+    pub tenant_id: String,
     /// Workload id — also names the netns (`w-<id>`), tap (`tap-<id>`), veth
     /// (`veth-<id>`) and mapper (`porche-<id>`). At most 10 chars keeps every derived
     /// interface name inside the kernel's 15-char limit.
@@ -57,6 +67,20 @@ impl WorkloadSpec {
     /// Validate the spec. Rejects anything that would leak into device names, the
     /// kernel cmdline, or the volume path un-sanitized.
     pub fn validate(&self) -> Result<(), String> {
+        if self.tenant_id.is_empty()
+            || !self
+                .tenant_id
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        {
+            return Err(format!(
+                "tenant_id {:?} must be non-empty [a-z0-9-]",
+                self.tenant_id
+            ));
+        }
+        if self.tenant_id.len() > 16 {
+            return Err(format!("tenant_id {:?} longer than 16 chars", self.tenant_id));
+        }
         if self.id.is_empty()
             || !self
                 .id
@@ -136,6 +160,7 @@ mod tests {
 
     fn spec() -> WorkloadSpec {
         WorkloadSpec {
+            tenant_id: default_tenant(),
             id: "w1".into(),
             image_digest: format!("sha256:{}", "a".repeat(64)),
             command: "echo hello > /dev/console".into(),

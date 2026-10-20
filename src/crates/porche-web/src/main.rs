@@ -41,6 +41,11 @@ pub struct AppState {
     pub admin_token: Option<String>,
     /// CLH version pin — executed once at startup, never per render.
     pub clh: ClhPin,
+    /// MS-2 PoC tenant map (E-31.3 — PoC-grade, static, no issuance/rotation):
+    /// `(tenant_id, token)` pairs from --tenants. A tenant token opens only
+    /// the user surface, scoped to its tenant. The legacy single user token
+    /// (if configured) maps to `t0`, preserving pre-MS-2 behavior.
+    pub tenants: Vec<(String, String)>,
     /// Reverse-proxy path prefix (E-30: `/porche/user`, `/porche/admin` behind
     /// dev.laplane.net's HAProxy; empty = direct loopback access). The
     /// middleware strips it before routing; redirects/cookie re-add it.
@@ -50,6 +55,13 @@ pub struct AppState {
 /// htmx, vendored (E-28 — no CDN) for live fragments only: console-log tail
 /// and state polls. No SPA, no JS toolchain.
 const HTMX_JS: &str = include_str!("../static/htmx.min.js");
+
+/// One PoC tenant entry (E-31.3 marker: static token, no rotation — the P1
+/// planes own real authN).
+#[derive(serde::Deserialize)]
+struct TenantEntry {
+    token: String,
+}
 
 /// Cloud Hypervisor version line (`cloud-hypervisor --version`), cached —
 /// the Fleet's CLH pin and the load rows must never re-exec per render.
@@ -139,15 +151,28 @@ struct Cli {
     /// `/a` admin-surface token.
     #[arg(long, env = "PORCHE_WEB_ADMIN_TOKEN")]
     admin_token: Option<String>,
+    /// MS-2 PoC tenant map (E-31.3): JSON file `{"t0": {"token": "..."}, ...}`.
+    /// Each entry opens only the user surface, scoped to its tenant. Static,
+    /// no issuance/rotation — PoC-grade by design, replaced by the P1 planes.
+    #[arg(long, env = "PORCHE_WEB_TENANTS")]
+    tenants: Option<PathBuf>,
 }
 
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
 
-    // strict by default: each surface needs its own token or nothing opens
+    // strict by default: each surface needs its token or nothing opens
+    // (user surface: a tenants file also satisfies this — the tenant tokens
+    // ARE the credentials; MS-2)
     let own_token = match cli.surface {
-        Surface::User => cli.user_token.is_some(),
+        Surface::User => {
+            cli.user_token.is_some()
+                || (cli.tenants.is_some()
+                    && std::fs::read_to_string(cli.tenants.as_ref().unwrap())
+                        .map(|t| !t.trim().is_empty())
+                        .unwrap_or(false))
+        }
         Surface::Admin => cli.admin_token.is_some(),
     };
     if !own_token {
@@ -157,6 +182,31 @@ async fn main() {
             cli.surface.name()
         );
         std::process::exit(2);
+    }
+
+    // MS-2 PoC tenant map (E-31.3): static JSON, no issuance/rotation — the
+    // marker is the honesty rule: this is PoC-grade auth, never claimed as
+    // security. The legacy single user token (if any) maps to t0.
+    let mut tenants: Vec<(String, String)> = Vec::new();
+    if let Some(path) = &cli.tenants {
+        let text = std::fs::read_to_string(path)
+            .unwrap_or_else(|e| panic!("porche-web: tenants {}: {e}", path.display()));
+        let map: std::collections::BTreeMap<String, TenantEntry> = serde_json::from_str(&text)
+            .unwrap_or_else(|e| panic!("porche-web: tenants {}: {e}", path.display()));
+        for (tid, e) in map {
+            if tid.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+                && !tid.is_empty()
+                && tid.len() <= 16
+            {
+                tenants.push((tid, e.token));
+            } else {
+                panic!("porche-web: invalid tenant id {tid:?} (must be [a-z0-9-], ≤16 chars)");
+            }
+        }
+    }
+    if let Some(ut) = &cli.user_token {
+        // legacy single-tenant token → t0 scope (preserves pre-MS-2 behavior)
+        tenants.push(("t0".into(), ut.clone()));
     }
 
     // E-30: normalize the reverse-proxy prefix once — no trailing slash, no
@@ -186,6 +236,7 @@ async fn main() {
         user_token: cli.user_token.clone(),
         admin_token: cli.admin_token.clone(),
         clh: ClhPin::detect(),
+        tenants: tenants.clone(),
         base_path: base_path.clone(),
     });
 

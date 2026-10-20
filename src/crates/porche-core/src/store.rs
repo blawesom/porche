@@ -35,6 +35,26 @@ pub trait DesiredStateStore: Send {
     fn list(&self) -> Result<Vec<Record>, StoreError>;
     fn set_state(&self, id: &str, state: &WorkloadState) -> Result<(), StoreError>;
     fn delete(&self, id: &str) -> Result<(), StoreError>;
+
+    // --- MS-2 tenancy scoping (E-31.2) -----------------------------------
+    /// Tenant-filtered list — the user surface's only view (view isolation:
+    /// a tenant sees exactly its own rows).
+    fn list_for_tenant(&self, tenant_id: &str) -> Result<Vec<Record>, StoreError> {
+        Ok(self
+            .list()?
+            .into_iter()
+            .filter(|r| r.spec.tenant_id == tenant_id)
+            .collect())
+    }
+    /// Tenant-scoped get — cross-tenant ids must look absent (404, not a
+    /// 403 leak that the object exists).
+    fn get_for_tenant(
+        &self,
+        tenant_id: &str,
+        id: &str,
+    ) -> Result<Option<Record>, StoreError> {
+        Ok(self.get(id)?.filter(|r| r.spec.tenant_id == tenant_id))
+    }
 }
 
 pub struct SqliteStore {
@@ -174,6 +194,7 @@ mod tests {
 
     fn spec(id: &str) -> WorkloadSpec {
         WorkloadSpec {
+            tenant_id: crate::spec::default_tenant(),
             id: id.into(),
             image_digest: format!("sha256:{}", "b".repeat(64)),
             command: "true".into(),
@@ -182,6 +203,13 @@ mod tests {
             volume: Some(VolumeSpec { size_mib: 8 }),
             ip6: "fd00::1".into(),
             gw6: "fd00::ff".into(),
+        }
+    }
+
+    fn spec_tenant(tenant: &str, id: &str) -> WorkloadSpec {
+        WorkloadSpec {
+            tenant_id: tenant.into(),
+            ..spec(id)
         }
     }
 
@@ -222,6 +250,57 @@ mod tests {
             store.set_state("nope", &WorkloadState::Running),
             Err(StoreError::NotFound(_))
         ));
+    }
+
+    // MS-2: view isolation — a tenant lists only its rows; a cross-tenant
+    // get looks absent (never a leak that the object exists).
+    #[test]
+    fn tenant_scoping_isolates_views() {
+        let store = SqliteStore::in_memory().unwrap();
+        store
+            .upsert(&spec_tenant("t0", "w1"), &WorkloadState::Running)
+            .unwrap();
+        store
+            .upsert(&spec_tenant("t1", "w2"), &WorkloadState::Running)
+            .unwrap();
+
+        let t0 = store.list_for_tenant("t0").unwrap();
+        assert_eq!(t0.len(), 1);
+        assert_eq!(t0[0].spec.id, "w1");
+
+        // t0 asking for t1's workload → None (404, not 403)
+        assert!(store.get_for_tenant("t0", "w2").unwrap().is_none());
+        // own row still resolves
+        assert!(store.get_for_tenant("t0", "w1").unwrap().is_some());
+    }
+
+    // pre-MS-2 rows (no tenant_id in spec_json) default to t0 on read
+    #[test]
+    fn legacy_rows_default_to_t0() {
+        let store = SqliteStore::in_memory().unwrap();
+        let _ = spec("w1");
+        let legacy_json = serde_json::to_string(&serde_json::json!({
+            "id": "legacy1",
+            "image_digest": format!("sha256:{}", "b".repeat(64)),
+            "command": "true",
+            "vcpu": 1,
+            "ram_mib": 64,
+            "volume": { "size_mib": 8 },
+            "ip6": "fd00::1",
+            "gw6": "fd00::ff"
+        }))
+        .unwrap();
+        let state_json = serde_json::to_string(&WorkloadState::Running).unwrap();
+        let conn = store.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO workloads (id, spec_json, state_json, created_at, updated_at)
+             VALUES (?1, ?2, ?3, 1, 1)",
+            params!["legacy1", legacy_json, state_json],
+        )
+        .unwrap();
+        drop(conn);
+        let rec = store.get("legacy1").unwrap().unwrap();
+        assert_eq!(rec.spec.tenant_id, "t0");
     }
 
     #[test]

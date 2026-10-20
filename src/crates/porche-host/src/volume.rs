@@ -172,6 +172,7 @@ mod tests {
 
     fn spec(id: &str, size_mib: u32) -> WorkloadSpec {
         WorkloadSpec {
+            tenant_id: porche_core::spec::default_tenant(),
             id: id.into(),
             image_digest: format!("sha256:{}", "f".repeat(64)),
             command: "true".into(),

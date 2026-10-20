@@ -118,6 +118,7 @@ mod tests {
 
     fn spec() -> WorkloadSpec {
         WorkloadSpec {
+            tenant_id: porche_core::spec::default_tenant(),
             id: "w1".into(),
             image_digest: format!("sha256:{}", "d".repeat(64)),
             command: "echo ok".into(),
