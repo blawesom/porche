@@ -60,6 +60,3 @@ requires one node reboot, batched last)
    absolute `/usr/local/bin/` path); missing `/api/v1` prefix on the CLH
    HTTP API; missing `vm.boot` after `vm.create`; two net ifaces cannot share
    one tap ("Resource busy") — the baseline's second iface needs its own tap.
-4. **baseline no-op** (the important one): CLH v54 defaults offloads OFF, so
-   `offloads_off=false` without explicit flags was identical to hardened.
-   Fixed in `porche-clh` config: baseline emits explicit `true` flags.
