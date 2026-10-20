@@ -1,0 +1,47 @@
+MS-1.M1 — node bring-up fixtures (doc 07 §8.6 artifact rule)
+run-id: 20261020-M1 (runs/20261020-M1/ms1/)
+captured: 2026-10-20T10:33:35Z ON node 1 over SSH (live, not a transcript of a prior run)
+
+== node identity ==
+instance:   i-f517519a (tinav7.c8r16p1, ded-53c8318b, eu-west-2a, NestedVirtualization=true)
+public ip:  eipalloc-84925ae5 → 148.253.126.10 (linked octl LinkPublicIp)
+region bsu: vol-ad0f8082 (200 GB gp2, linked octl LinkVolume /dev/sdb)
+omi:        ami-19a6bfa1 RockyLinux-9-2024.10.16-0
+keypair:    porche-integ2 (authorized key injected via UserData ssh_authorized_keys —
+            doc 13 §4.12; ReadConsoleOutput authorized-keys table showed
+            'porche-integ-20261019' fp 38:9d:28:3f:…:97:cb before SSH was trusted)
+
+NOTE (E-29 rollout, live gap cleared before claim): the plan premise "node 1 stopped"
+was false at burst start — i-b48c9483 was DELETED (absent from ReadVms; TF state held
+no VMs). Node 1 was recreated out-of-band per metal.tf's lost-node recipe (§4.14:
+create + link + re-import). This does not disturb MS-1's scope: the host fixture is
+what WS-A delivers, and it is recorded here live.
+
+== kernel ==
+Linux ip-10-9-48-210 5.14.0-427.37.1.el9_4.x86_64 #1 SMP PREEMPT_DYNAMIC Wed Sep 25 11:51:41 UTC 2024 (interim Rocky 9.4 host — §7.1 sequencing; recorded run is FCOS)
+
+== CLH ==
+cloud-hypervisor v54.0
+sha256 4f4f98a3d661a40f3e5272627cc895a1b2e525f2f6bedf5f895f9cd21ba5c65b (digest-checked at fetch, 2026-10-20; same pin as harness/node-setup.sh expects and as f649f15's recipe)
+
+== SEC-11 sysctls (the four §7.2 items, all asserted ok) ==
+kernel.io_uring_disabled = 2
+user.max_user_namespaces = 0
+kernel.core_pattern = core
+kernel.modules_disabled = 1
+
+== region disk + mount ==  (detection by SERIAL, never by name — plan rule)
+/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_sdb → ../../sda (platform maps the link to sda)
+/dev/sda: LABEL="porche-nvme" TYPE="ext4"
+findmnt /var/lib/porche: /dev/sda ext4 rw,relatime,discard
+
+== modules warmed + verified before seal ==
+bridge veth nf_tables dm_mod dm_crypt loop tun (all present in /sys/module)
+/dev/net/tun present; brporche up
+
+== host-agent commit ==  (the 20261019-1201 gap, closed here)
+MS-1 code trees do not exist yet at this step (M3 adds them); the recipe applying
+these facts is committed in the same MS-1 commit as harness/node-setup.sh +
+harness/sysctl-assert.sh on top of rollback commit a44c44c (= f649f15's child, whose
+parent pin keeps the pre-rollback trees recoverable). Every MS-1 run artifact from M2
+on records the exact checkout commit that produced it.

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block crumb %}{{ method }} — wipe report{% endblock %}
+{% block meta %}{% endblock %}
+{% block content %}
+<h1>{{ method }} — wipe report</h1>
+<p><strong>{{ id }}</strong> is deleted. Deletion is an operation (doc 09
+conventions): teardown with a reported wipe — the audit trail outlives the
+object. All five probes must pass or the row would still exist:</p>
+<table>
+  <tr><th>probe</th><th>result</th></tr>
+  <tr><td>mapper_absent</td><td><span class="chip {% if mapper_absent %}ok{% else %}err{% endif %}">{% if mapper_absent %}pass{% else %}FAIL{% endif %}</span></td></tr>
+  <tr><td>keyfile_entry_removed</td><td><span class="chip {% if keyfile_entry_removed %}ok{% else %}err{% endif %}">{% if keyfile_entry_removed %}pass{% else %}FAIL{% endif %}</span></td></tr>
+  <tr><td>keyslots_erased</td><td><span class="chip {% if keyslots_erased %}ok{% else %}err{% endif %}">{% if keyslots_erased %}pass{% else %}FAIL{% endif %}</span></td></tr>
+  <tr><td>region_trimmed</td><td><span class="chip {% if region_trimmed %}ok{% else %}err{% endif %}">{% if region_trimmed %}pass{% else %}FAIL{% endif %}</span></td></tr>
+  <tr><td>region_clean</td><td><span class="chip {% if region_clean %}ok{% else %}err{% endif %}">{% if region_clean %}pass{% else %}FAIL{% endif %}</span></td></tr>
+</table>
+<h2>Report (JSON)</h2>
+<pre>{{ report_json }}</pre>
+<p><a class="btn link" href="{{ base }}{{ next_href }}">← {{ next_label }}</a></p>
+{% endblock %}

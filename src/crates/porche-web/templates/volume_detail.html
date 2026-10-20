@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block crumb %}Volumes / {{ row.id }}{% endblock %}
+{% block meta %}{% endblock %}
+{% block content %}
+<h1>Volume {{ row.id }}</h1>
+<div class="card">
+  <h2>Spec</h2>
+  <table>
+    <tr><th>size</th><td>{{ row.size_mib }}M</td></tr>
+    <tr><th>tier</th><td>tier-E (LUKS2 crypto-erase on delete)</td></tr>
+    <tr><th>state</th><td><span class="chip {{ row.state_css }}">{{ row.state_label }}</span></td></tr>
+    <tr><th>attached to</th><td>{% if row.attached.is_some() %}<a href="{{ base }}/w/{{ row.id }}">{{ row.attached_label }}</a>{% else %}—{% endif %}</td></tr>
+    <tr><th>created</th><td class="subtle">{{ created }}</td></tr>
+    <tr><th>reported</th><td class="subtle">{{ updated }}</td></tr>
+  </table>
+</div>
+<div class="card">
+  <h2>Relations</h2>
+  <div class="rel">
+    {% if row.attached.is_some() %}<a href="{{ base }}/w/{{ row.id }}">Workload: {{ row.attached_label }}</a>{% endif %}
+    <a href="{{ base }}/a/host">Host</a>
+  </div>
+  <div class="topo">
+    <svg width="420" height="86" viewBox="0 0 420 86" role="img" aria-label="topology: host to workload to volume">
+      <rect x="4" y="24" width="110" height="38" rx="5"/>
+      <text class="node" x="59" y="40" text-anchor="middle">host</text>
+      <line x1="114" y1="43" x2="152" y2="43"/>
+      <polyline points="146,39 152,43 146,47" fill="none"/>
+      <rect x="152" y="24" width="110" height="38" rx="5"/>
+      <text class="node" x="207" y="40" text-anchor="middle">workload</text>
+      <text x="207" y="56" text-anchor="middle">{% if row.attached.is_some() %}{{ row.attached_label }}{% else %}—{% endif %}</text>
+      <line x1="262" y1="43" x2="300" y2="43"/>
+      <polyline points="294,39 300,43 294,47" fill="none"/>
+      <rect x="300" y="24" width="110" height="38" rx="5"/>
+      <text class="node" x="355" y="40" text-anchor="middle">volume</text>
+      <text x="355" y="56" text-anchor="middle">{{ row.id }} (tier-E)</text>
+    </svg>
+    <div class="subtle">static topology figure — the object's slots on this host</div>
+  </div>
+</div>
+<div class="actions">
+  <form class="inline" method="post" action="{{ base }}/w/volumes/{{ row.id }}/delete"
+        onsubmit="return confirm('DeleteVolume crypto-erases this volume and renders the wipe report. Continue?')">
+    <button class="primary">Delete</button>
+  </form>
+</div>
+<p><a class="btn link" href="{{ base }}/w/volumes">← volumes</a></p>
+{% endblock %}

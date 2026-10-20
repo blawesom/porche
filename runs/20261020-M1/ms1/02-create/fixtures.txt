@@ -1,0 +1,32 @@
+MS-1.M3 fixtures — runs/20261020-M1/ms1/02-create/fixtures.txt
+captured live 2026-10-20T10:59Z (node 1 = i-f517519a)
+
+== host-agent ==
+binary: /usr/local/bin/porche (static, x86_64-unknown-linux-musl, rustc 1.91.1)
+version: porche 0.1.0
+binary sha256: 2184febb791124b073cbf57f3d06ad1fcea397b31038532a684eedc183c61e2a
+source commit at build: a44c44c (working tree carrying MS-1 changes; see results.md)
+test base: 33 passed (cargo test --workspace)
+
+== node software (00-host-fixtures.txt) ==
+CLH v54.0 sha256:4f4f98a3d661a40f3e5272627cc895a1b2e525f2f6bedf5f895f9cd21ba5c65b
+kernel 5.14.0-427.37.1.el9_4.x86_64 (interim Rocky 9.4 host — §7.1 sequencing)
+
+== guest image selected by spec ==
+image_digest: sha256:96291392360e3448e6bdf46ce9c702de3e889efad3272dbee4e4419aeb81652a
+(= the M2 manifest digest; kernel/initramfs digests in 01-guest-manifest.txt)
+
+== spec ==
+id ms1create1, vcpu 1, ram 128 MiB, volume 256 MiB, ip6 fd42:1:1::5/128 gw fd42:1:1::ff,
+command = printf porche-hello (finite job)
+
+== hardening state at run time (SEC-11, assert = harness/sysctl-assert.sh) ==
+ok kernel.io_uring_disabled=2 · ok user.max_user_namespaces=0
+ok kernel.core_pattern=core  · ok kernel.modules_disabled=1
+
+== KDF rule in effect (03-kdf-bench) ==
+luksFormat --pbkdf argon2id --pbkdf-memory 65536 --pbkdf-force-iterations 4 (≈0.7 s)
+
+== offload / device surface ==
+offloads_off: true (VmConfig default — SEC-7)
+device surface: frozen (porche-clh VmConfig — SEC-3); guest sees virtio-blk/net + ttyS0 only

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block crumb %}Volumes{% endblock %}
+{% block meta %}{% endblock %}
+{% block content %}
+<h1>Volumes</h1>
+<p class="subtle">tier-E volumes live with their workload (created by
+CreateWorkload — no standalone volume create in MS-1). Deleting a volume
+runs the same crypto-erase wipe path as workload delete and renders the same
+report.</p>
+{% if rows.is_empty() %}
+<p class="subtle">no volumes</p>
+{% else %}
+<table>
+  <tr><th>workload</th><th>size</th><th>tier</th><th>state</th><th>attached to</th><th>actions</th></tr>
+  {% for v in rows %}
+  <tr>
+    <td><a href="{{ base }}/w/volumes/{{ v.id }}">{{ v.id }}</a></td>
+    <td>{{ v.size_mib }}M</td>
+    <td>tier-E</td>
+    <td><span class="chip {{ v.state_css }}">{{ v.state_label }}</span></td>
+    <td>{% if v.attached.is_some() %}<a href="{{ base }}/w/{{ v.id }}">{{ v.attached_label }}</a>{% else %}—{% endif %}</td>
+    <td>
+      <form class="inline" method="post" action="{{ base }}/w/volumes/{{ v.id }}/delete"
+            onsubmit="return confirm('DeleteVolume crypto-erases the volume (and its workload wiring) and renders the wipe report. Continue?')">
+        <button>Delete</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

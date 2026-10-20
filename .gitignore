@@ -3,3 +3,8 @@
 *.log
 infra/integration/tfplan-bsu
 infra/integration/tfplan-links
+
+# MS-1 build trees (regenerated, never committed)
+/src/target/
+guest/dl/
+guest/out/

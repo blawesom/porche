@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/porche-core",
+    "crates/porche-clh",
+    "crates/porche-host",
+    "crates/porche-web",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+# PORCHE — one binary, role-selected at startup (I-13, doc 12 §3).
+# PoC scope (doc 07 §2): only the host-agent role exists; the workspace is the
+# seed the P0 roles (tenant-plane, admin-plane, kms, storage-worker,
+# build-worker) grow into without re-shaping the core.

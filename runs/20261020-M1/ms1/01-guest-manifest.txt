@@ -1,0 +1,35 @@
+MS-1.M2 — guest image manifest (doc 07 §7.1, §8.6 artifact rule)
+run-id: 20261020-M1 (runs/20261020-M1/ms1/)
+built: 2026-10-20T10:39Z locally (Ubuntu 24.04, gcc 15.2.0); installed on node 1 same day
+
+== source pins (spot-verified live at fetch, 2026-10-20) ==
+linux-6.18.57.tar.xz       sha256:5bd9acdc82ec5efc3790ae840e5aaa40dfde7efff261cf6dde902dc570acf98c  (cdn.kernel.org — OK)
+busybox-1.36.1.tar.bz2     sha256:b8cc24c9574d809e7279c3be349795c5d5ceb6fdf19ca709f80cde50e47de314  (busybox.net — OK)
+
+== built artifacts (digest convention: platform image ID = sha256 of guest/out/manifest.txt) ==
+kernel 6.18.57 (bzImage)       sha256:15033a952f6f990e1c4e418ae07dc65d656cb03aa3c52e0f29a78c4ad00b5311
+initramfs busybox-1.36.1       sha256:1d45a2a404ab807c7e661e98e25684f550528f102d1fd504b6e83e7339859b53
+platform_init (guest/build/init.sh) sha256:328fd77cc09ea2257617c86f49082193c3d7033cad38bff973719f07b03d8124
+
+platform image ID: sha256:96291392360e3448e6bdf46ce9c702de3e889efad3272dbee4e4419aeb81652a
+(= sha256(guest/out/manifest.txt); installed as /var/lib/porche/images/<ID>/{kernel,initramfs,manifest.txt}
+ on node 1 — this ID is the `image_digest` the MS-1.M3 spec selects)
+
+== boot-copy proof (01-boot-copy-serial.log, live 2026-10-20T10:47Z in 1.75 s) ==
+porche.ready
+porche-helloporche.done rc=0
+ACPI PM: Preparing to enter system sleep state S5 → reboot: Power down
+(markers: PRESENT, ordered; workload output present; deterministic poweroff)
+
+== defect found and fixed during this step (kept in the record) ==
+First boot-copy panicked ("Attempted to kill init!"): build/init.sh ran the workload
+under `set -e` and a nonzero rc killed init BEFORE `porche.done` printed — rc never
+reached the marker. Fixed: `rc=0` initialized, `/bin/sh -c "$cmd" || rc=$?` captures
+any rc; the marker prints unconditionally. The boot-copy above is the re-run AFTER the
+fix. Any pre-fix console log in this run dir carries the panic inline.
+
+== pre-rollback images observed on the node's region disk (evidence of a surviving
+   data dir from the 2026-10-19 run; kept untouched) ==
+sha256:6fb0934784ce579badc7744c2a5fabb3b58b5b31bc6f3b36976e9f0826f7b7b0 (image, dated Oct 19)
+sha256:9987be0107f94ec469bfefeabb026ba836eaefd5d0968743a92d656b83eba851 (image, dated Oct 19 — matches runs/20261019-1201-miniloop/spec.json)
++ desired-state.sqlite3 + volumes/loop1.img (the historical miniloop residue; not deleted — out of MS-1 scope)

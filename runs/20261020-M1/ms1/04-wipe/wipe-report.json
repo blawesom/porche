@@ -1,0 +1,37 @@
+{
+  "run": "20261020-M1/ms1/04-wipe",
+  "workload": "ms1wipe1",
+  "marker_probe": {
+    "input": "runs/20261020-M1/ms1/04-wipe/markers.hex (two 35-byte markers)",
+    "written": "dd of=/dev/vda bs=64k seek=0 and seek=7 — dd stdout 35 bytes copied each, see serial-console.log",
+    "channels": "markers land in the ciphertext region only, never the console — console grep=0 is expected, not a gap"
+  },
+  "pre_wipe_state": {
+    "mapper_ms1wipe1": "present (ls /dev/mapper)",
+    "volume_ms1wipe1_img": "present, 256 MiB (sparse)",
+    "netns_w_ms1wipe1": "present",
+    "kms_entry": "present in /etc/porche/keys.json"
+  },
+  "wipe_report": {
+    "mapper_absent": true,
+    "keyfile_entry_removed": true,
+    "keyslots_erased": true,
+    "region_trimmed": true,
+    "region_clean": true
+  },
+  "probe_detail": {
+    "mapper": "absent: /dev/mapper/porche-ms1wipe1 gone after luksClose",
+    "keyfile": "entry removed from /etc/porche/keys.json (grep count 0); per-cycle key file zeroed and deleted before luksFormat returned (keyfile hygiene)",
+    "keyslots": "cryptsetup luksErase rc=0 — LUKS2 header + key slots gone, DEK cryptographically unrecoverable (E-6)",
+    "trim": "fallocate --dig rc=0 on the region file on a discard-mounted ext4 — freed extents TRIMmed to the BSU",
+    "region_scan": "region_clean=true — both 35-byte probe markers were on the ciphertext region before wipe and are absent after"
+  },
+  "post_wipe_state": {
+    "mapper_ms1wipe1": "gone",
+    "netns_w_ms1wipe1": "gone",
+    "kms_entry_ms1wipe1": "gone",
+    "region_file": "remains on disk (expected: crypto-erase, E-6 — claims are about keys and trim, not bytes)"
+  },
+  "duration_ms_wipe_verb_wall": 1768,
+  "note": "Closes the pre-rollback '319 ms' evidence-gap class: this is the machine's own per-probe record, committed as its own file (doc 07 §8.6 MS-1 exit)."
+}

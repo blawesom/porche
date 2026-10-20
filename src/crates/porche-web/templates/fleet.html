@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block crumb %}Fleet{% endblock %}
+{% block meta %}read-only admin surface{% endblock %}
+{% block content %}
+<h1>Fleet</h1>
+<p class="subtle">single-host Fleet overview (admin surface, read-only — host
+onboard/offboard/drain are P0-plane work, out of MS-1).</p>
+
+<div class="card">
+  <h2>Host identity</h2>
+  <table>
+    <tr><th>hostname</th><td>{{ hostname }}</td></tr>
+    <tr><th>kernel</th><td><code>{{ osrelease }}</code></td></tr>
+    <tr><th>cloud-hypervisor</th><td><code>{{ clh_version }}</code></td></tr>
+    <tr><th>uptime</th><td>{{ load.uptime }}</td></tr>
+    <tr><th>load</th><td>{{ load.loadavg }}</td></tr>
+    <tr><th>memory</th><td>{{ load.mem_used_pct }}% used — {{ load.mem_avail_mb }} MB free of {{ load.mem_total_mb }} MB</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Allocations</h2>
+  {% if allocs.is_empty() %}
+  <p class="subtle">no workloads</p>
+  {% else %}
+  <table>
+    <tr><th>workload</th><th>state</th><th>vcpu / ram</th><th>ip6</th><th>volume</th><th>created</th></tr>
+    {% for a in allocs %}
+    <tr>
+      <td><a href="{{ base }}/w/{{ a.id }}">{{ a.id }}</a></td>
+      <td><span class="chip {{ a.state_css }}">{{ a.state_label }}</span></td>
+      <td>{{ a.vcpu }} / {{ a.ram_mib }}M</td>
+      <td><code>{{ a.ip6 }}</code></td>
+      <td>{{ a.volume }}</td>
+      <td class="subtle">{{ a.created }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Wipe overview</h2>
+  <table>
+    <tr><th>wipe operations</th><td>{{ wipes_total }}</td></tr>
+    <tr><th>failed wipes <span class="subtle">(from the audit trail)</span></th><td><span class="chip {% if wipes_failed == 0 %}ok{% else %}err{% endif %}">{% if wipes_failed == 0 %}0 expected, none recorded{% else %}{{ wipes_failed }}{% endif %}</span></td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Guest images (live manifest)</h2>
+  {% if images.is_empty() %}
+  <p class="subtle">no image dirs in $DATA_DIR/images</p>
+  {% else %}
+  <table>
+    {% for i in images %}
+    <tr><td><code>{{ i }}</code></td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+<p><a class="btn link" href="{{ base }}/a/host">host detail → events</a></p>
+{% endblock %}

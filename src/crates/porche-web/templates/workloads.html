@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block crumb %}Workloads{% endblock %}
+{% block meta %}{% endblock %}
+{% block content %}
+<h1>Workloads</h1>
+<div class="actions">
+  <a class="btn primary" href="{{ base }}/w/new">Create</a>
+</div>
+{% if records.is_empty() %}
+<p class="subtle">no workloads</p>
+{% else %}
+<table>
+<tr><th>id</th><th>state</th><th>vcpu / ram</th><th>ip6</th><th>volume</th><th>created</th><th>actions</th></tr>
+{% for r in records %}
+<tr>
+  <td><a href="{{ base }}/w/{{ r.id }}">{{ r.id }}</a></td>
+  <td><span class="chip {{ r.state_css }}">{{ r.state_label }}</span></td>
+  <td>{{ r.vcpu }} / {{ r.ram_mib }}M</td>
+  <td><code>{{ r.ip6 }}</code></td>
+  <td>{% if r.volume_link %}<a href="{{ base }}/w/volumes/{{ r.id }}">{{ r.volume_label }}</a>{% else %}{{ r.volume_label }}{% endif %}</td>
+  <td class="subtle">{{ r.created }}</td>
+  <td>
+    {% if r.can_stop %}
+    <form class="inline" method="post" action="{{ base }}/w/{{ r.id }}/stop"><button>Stop</button></form>
+    {% endif %}
+    {% if r.can_delete %}
+    <form class="inline" method="post" action="{{ base }}/w/{{ r.id }}/delete"
+          onsubmit="return confirm('DeleteWorkload kills the VM, unmaps and crypto-erases the volume. Continue?')">
+      <button>Delete</button>
+    </form>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+</table>
+{% endif %}
+{% endblock %}

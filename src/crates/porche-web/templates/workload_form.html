@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block crumb %}Workloads / create{% endblock %}
+{% block meta %}{% endblock %}
+{% block content %}
+<h1>Create workload</h1>
+{% match error %}
+{% when Some with (e) %}
+<div class="banner err-banner"><strong>rejected:</strong> {{ e }}</div>
+{% when None %}
+{% endmatch %}
+<form method="post" action="{{ base }}/w/new">
+  <label>id <span class="subtle">([a-z0-9-], ≤10 chars — it names the netns/tap/veth/mapper devices)</span></label>
+  <input name="id" value="{{ form.id }}" required>
+  <label>image digest <span class="subtle">(live guest manifest — $DATA_DIR/images/)</span></label>
+  <select name="image_digest" required>
+    {% for img in images %}
+    <option value="{{ img.name }}" {% if img.selected %}selected{% endif %}>{{ img.name }}{% if !img.manifest.is_empty() %} — {{ img.manifest }}{% endif %}</option>
+    {% endfor %}
+  </select>
+  <label>command <span class="subtle">(shell string — the guest runs it once, e.g. <code>printf porche-hello;poweroff -f</code>)</span></label>
+  <input name="command" value="{{ form.command }}" required>
+  <label>vcpu <span class="subtle">(1..=64)</span></label>
+  <input name="vcpu" value="{{ form.vcpu }}" required>
+  <label>ram (MiB) <span class="subtle">(64..=65536)</span></label>
+  <input name="ram_mib" value="{{ form.ram_mib }}" required>
+  <label>volume (MiB) <span class="subtle">(tier-E LUKS2, created with the workload; 1..=102400)</span></label>
+  <input name="volume_mib" value="{{ form.volume_mib }}">
+  <label>ip6 <span class="subtle">(the workload's /128, bare address)</span></label>
+  <input name="ip6" value="{{ form.ip6 }}" required>
+  <label>gw6 <span class="subtle">(gateway on the netns tap)</span></label>
+  <input name="gw6" value="{{ form.gw6 }}" required>
+  <button class="primary" type="submit">Create</button>
+</form>
+<p><a class="btn link" href="{{ base }}/w">← workloads</a></p>
+{% endblock %}

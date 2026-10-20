@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block crumb %}Workloads / {{ row.id }}{% endblock %}
+{% block meta %}{% endblock %}
+{% block content %}
+<h1>Workload {{ row.id }}</h1>
+{% match failed_reason %}
+{% when Some with (r) %}
+<div class="banner err-banner"><strong>failed:</strong> {{ r }}</div>
+{% when None %}
+{% endmatch %}
+
+<div class="actions">
+  {% if row.can_stop %}
+  <form class="inline" method="post" action="{{ base }}/w/{{ row.id }}/stop"><button>Stop</button></form>
+  {% endif %}
+  {% if row.can_delete %}
+  <form class="inline" method="post" action="{{ base }}/w/{{ row.id }}/delete"
+        onsubmit="return confirm('DeleteWorkload kills the VM, unmaps and crypto-erases the volume. Continue?')">
+    <button class="primary">Delete</button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Spec</h2>
+  <table>
+    <tr><th>state</th><td><span class="chip {{ row.state_css }}">{{ row.state_label }}</span></td></tr>
+    <tr><th>placement</th><td class="subtle">{{ placement_reason }}</td></tr>
+    <tr><th>image digest</th><td><code>{{ image_digest }}</code></td></tr>
+    <tr><th>command</th><td><code>{{ command }}</code></td></tr>
+    <tr><th>vcpu / ram</th><td>{{ row.vcpu }} / {{ row.ram_mib }}M</td></tr>
+    <tr><th>ip6</th><td><code>{{ row.ip6 }}</code></td></tr>
+    <tr><th>volume</th><td>{% if row.volume_link %}<a href="{{ base }}/w/volumes/{{ row.id }}">{{ row.volume_label }}</a> (tier-E){% else %}{{ row.volume_label }}{% endif %}</td></tr>
+    <tr><th>created</th><td class="subtle">{{ created }}</td></tr>
+    <tr><th>reported</th><td class="subtle">{{ updated }}</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Relations</h2>
+  <div class="rel">
+    <a href="{{ base }}/a/host">Host: {{ host_label }}</a>
+    {% if row.volume_link %}
+    <a href="{{ base }}/w/volumes/{{ row.id }}">Volume: {{ row.volume_label }}</a>
+    {% endif %}
+    <span class="subtle">host link opens the admin surface (cross-surface)</span>
+  </div>
+  <div class="topo">
+    <svg width="420" height="86" viewBox="0 0 420 86" role="img" aria-label="topology: host to workload to volume">
+      <rect x="4" y="24" width="110" height="38" rx="5"/>
+      <text class="node" x="59" y="40" text-anchor="middle">host</text>
+      <text x="59" y="56" text-anchor="middle">{{ host_label }}</text>
+      <line x1="114" y1="43" x2="152" y2="43"/>
+      <polyline points="146,39 152,43 146,47" fill="none"/>
+      <rect x="152" y="24" width="110" height="38" rx="5"/>
+      <text class="node" x="207" y="40" text-anchor="middle">workload</text>
+      <text x="207" y="56" text-anchor="middle">{{ row.id }}</text>
+      <line x1="262" y1="43" x2="300" y2="43"/>
+      <polyline points="294,39 300,43 294,47" fill="none"/>
+      <rect x="300" y="24" width="110" height="38" rx="5"/>
+      <text class="node" x="355" y="40" text-anchor="middle">volume</text>
+      <text x="355" y="56" text-anchor="middle">{{ volume_slot }}</text>
+    </svg>
+    <div class="subtle">static topology figure — the object's slots on this host</div>
+  </div>
+</div>
+
+<h2>Console</h2>
+<div id="console" hx-get="{{ base }}/w/{{ row.id }}/console" hx-trigger="every 2s">
+  <p class="subtle">loading console log…</p>
+</div>
+
+<h2>Events</h2>
+<table>
+  <tr><th>time</th><th>event</th></tr>
+  {% for e in events %}
+  <tr>
+    <td class="subtle">{{ e.time }}</td>
+    <td class="{{ e.tone }}">{{ e.label }} <span class="subtle">({{ e.source }})</span></td>
+  </tr>
+  {% endfor %}
+</table>
+<p class="subtle">`done (rc=N)` is derived from the console marker <code>porche.done rc=N</code> and the absent VM socket — never from the store enum alone. Event times marked ≈ are estimates anchored on the log's monotonic offsets.</p>
+{% endblock %}

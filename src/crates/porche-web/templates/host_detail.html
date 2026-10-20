@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block crumb %}Fleet / host{% endblock %}
+{% block meta %}read-only admin surface{% endblock %}
+{% block content %}
+<h1>Host detail</h1>
+
+<div class="card">
+  <h2>Identity</h2>
+  <table>
+    <tr><th>hostname</th><td>{{ hostname }}</td></tr>
+    <tr><th>kernel</th><td><code>{{ osrelease }}</code></td></tr>
+    <tr><th>cloud-hypervisor</th><td><code>{{ clh_version }}</code></td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Metrics</h2>
+  <table>
+    <tr><th>uptime</th><td>{{ load.uptime }}</td></tr>
+    <tr><th>load</th><td>{{ load.loadavg }}</td></tr>
+    <tr><th>memory</th><td>{{ load.mem_used_pct }}% used — {{ load.mem_avail_mb }} MB free of {{ load.mem_total_mb }} MB</td></tr>
+    <tr><th>events tracked</th><td>{{ event_count }} across {{ workloads.len() }} workload(s)</td></tr>
+  </table>
+</div>
+
+<h2>Per-workload event stream</h2>
+{% if workloads.is_empty() %}
+<p class="subtle">no workloads</p>
+{% endif %}
+{% for w in workloads %}
+<div class="card">
+  <h2><a href="{{ base }}/w/{{ w.id }}">{{ w.id }}</a> · <span class="chip {{ w.state_css }}">{{ w.state_label }}</span></h2>
+  <table>
+    <tr><th>time</th><th>event</th></tr>
+    {% for e in w.events %}
+    <tr>
+      <td class="subtle">{{ e.time }}</td>
+      <td class="{{ e.tone }}">{{ e.label }} <span class="subtle">({{ e.source }})</span></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endfor %}
+<p class="subtle">Events are the store's created/updated transitions plus the
+console markers (<code>porche.ready</code>, <code>porche.done rc=N</code>,
+<code>reboot: Power down</code>) derived from each workload's serial log;
+<code>done (rc=N)</code> derives from the marker plus the VM socket absence —
+never the store enum alone.</p>
+<p><a class="btn link" href="{{ base }}/a">← fleet</a></p>
+{% endblock %}

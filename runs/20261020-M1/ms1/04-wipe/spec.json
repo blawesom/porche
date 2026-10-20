@@ -1,0 +1,10 @@
+{
+  "id": "ms1wipe1",
+  "image_digest": "sha256:96291392360e3448e6bdf46ce9c702de3e889efad3272dbee4e4419aeb81652a",
+  "command": "printf PORCHE-MS1-WIPE-PROBE-MARKER-AAAA01 | dd of=/dev/vda bs=64k seek=0 conv=notrunc; printf PORCHE-MS1-WIPE-PROBE-MARKER-BBBB02 | dd of=/dev/vda bs=64k seek=7 conv=notrunc",
+  "vcpu": 1,
+  "ram_mib": 128,
+  "volume": { "size_mib": 256 },
+  "ip6": "fd42:1:1::6",
+  "gw6": "fd42:1:1::ff"
+}

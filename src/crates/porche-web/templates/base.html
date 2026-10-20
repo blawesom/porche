@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PORCHE console</title>
+<style>
+  /* MS-1 console chrome (operator frame, 2026-01-20): industry-standard,
+     flavorless object console — system font stack, conventional table
+     density, no hero/branded colors. All colors ride CSS variables. */
+  :root {
+    --fg: #1c2128;
+    --muted: #57606a;
+    --border: #d0d7de;
+    --surface: #ffffff;
+    --accent: #0a5fd0;
+    --success: #1a7f37;
+    --warning: #9a6700;
+    --error: #cf222e;
+    color-scheme: light dark;
+    background: var(--surface);
+    color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fg: #e6edf3;
+      --muted: #8b949e;
+      --border: #30363d;
+      --surface: #0d1117;
+      --accent: #58a6ff;
+      --success: #3fb950;
+      --warning: #d29922;
+      --error: #f85149;
+    }
+  }
+  body { margin: 0; background: var(--surface); color: var(--fg); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* left-nav of object types */
+  .frame { display: flex; min-height: 100vh; }
+  aside {
+    width: 12rem; flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    padding: .8rem .6rem;
+    box-sizing: border-box;
+  }
+  aside .brand { font-weight: 600; padding: 0 .5rem .7rem; }
+  aside nav a {
+    display: block; padding: .35rem .5rem;
+    color: var(--fg); border-radius: 4px;
+  }
+  aside nav a.active { background: var(--border); font-weight: 600; }
+  aside nav a:hover { text-decoration: none; background: var(--border); }
+  aside .surface { margin-top: 1.2rem; padding: 0 .5rem; }
+  main { flex: 1; padding: 1.2rem 1.5rem; max-width: 72rem; }
+  header.top {
+    display: flex; align-items: baseline; gap: 1rem;
+    border-bottom: 1px solid var(--border);
+    padding: .6rem 1.5rem; width: 100%; box-sizing: border-box;
+  }
+  header.top .crumb { color: var(--muted); }
+  header.top .meta { margin-left: auto; color: var(--muted); font-size: .82rem; }
+
+  h1 { font-size: 1.35rem; margin: 0 0 .8rem; }
+  h2 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
+
+  /* conventional table density */
+  table { border-collapse: collapse; width: 100%; }
+  th, td {
+    text-align: left; padding: .32rem .6rem;
+    border-bottom: 1px solid var(--border);
+    font-size: .92rem; vertical-align: top;
+  }
+  th { color: var(--muted); font-weight: 600; }
+
+  /* attribute cards ("spec card") */
+  .card {
+    border: 1px solid var(--border); border-radius: 6px;
+    margin: 0 0 1rem; overflow: hidden;
+  }
+  .card h2 {
+    margin: 0; padding: .45rem .8rem;
+    border-bottom: 1px solid var(--border); font-size: .92rem;
+  }
+  .card table { border: 0; }
+  .card tr:last-child td, .card tr:last-child th { border-bottom: 0; }
+
+  /* state chips */
+  .chip {
+    display: inline-block; border: 1px solid var(--border);
+    border-radius: 10px; padding: 0 .55rem; font-size: .82rem;
+  }
+  .ok .chip-bool, .chip.ok { color: var(--success); border-color: var(--success); }
+  .warn .chip-bool, .chip.warn { color: var(--warning); border-color: var(--warning); }
+  .err .chip-bool, .chip.err { color: var(--error); border-color: var(--error); }
+
+  /* conventional CRUD action bar */
+  .actions { display: flex; gap: .5rem; margin: .8rem 0; align-items: center; flex-wrap: wrap; }
+  button, .btn {
+    padding: .32rem .85rem; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 5px;
+    background: var(--surface); color: var(--fg); font-size: .9rem;
+  }
+  .btn.primary, button.primary {
+    background: var(--accent); border-color: var(--accent); color: var(--surface);
+  }
+  .btn.link { border-color: transparent; color: var(--accent); }
+  form.inline { display: inline; }
+  form.inline button { margin: 0; padding: .18rem .65rem; }
+
+  /* forms */
+  form label { display: block; margin-top: .75rem; font-size: .85rem; color: var(--muted); }
+  form input, form select, form textarea {
+    padding: .32rem; width: 100%; max-width: 36rem;
+    box-sizing: border-box;
+    border: 1px solid var(--border); border-radius: 5px;
+    background: var(--surface); color: var(--fg); font-size: .92rem;
+  }
+  form button { margin-top: 1rem; }
+  .opt-note {
+    display: block; color: var(--muted); font-size: .78rem;
+    margin: 0 0 .15rem; padding: 0 .25rem;
+  }
+
+  /* toast / banner */
+  .banner { padding: .55rem .85rem; border: 1px solid var(--border); border-radius: 5px; margin-bottom: 1rem; }
+  .banner.err-banner { border-color: var(--error); color: var(--error); }
+  .banner.ok-banner { border-color: var(--success); color: var(--success); }
+
+  /* console + panels */
+  pre {
+    background: var(--border); padding: .65rem;
+    overflow-x: auto; font-size: .84rem;
+    border-radius: 5px;
+    max-height: 26rem; overflow-y: auto;
+  }
+  code { background: var(--border); padding: 0 .3rem; border-radius: 3px; }
+  .subtle { color: var(--muted); font-size: .85rem; }
+  .rel a { margin-right: 1rem; }
+  .topo { margin: 1rem 0; }
+  .topo text { fill: var(--muted); font-family: system-ui, sans-serif; font-size: 11px; }
+  .topo text.node { fill: var(--fg); font-weight: 600; }
+  .topo rect { fill: var(--surface); stroke: var(--border); }
+  .topo line, .topo polyline { stroke: var(--muted); }
+  .metrics { display: flex; gap: 2.2rem; margin: .6rem 0 1rem; flex-wrap: wrap; }
+  .metric .k { color: var(--muted); font-size: .8rem; }
+  .metric .v { font-size: 1.25rem; font-weight: 600; }
+</style>
+<script src="{{ base }}/htmx.js"></script>
+</head>
+<body>
+<div class="frame">
+  <aside>
+    <div class="brand">PORCHE</div>
+    <nav>
+      <a href="{{ base }}/w" id="nav-workloads">Workloads</a>
+      <a href="{{ base }}/w/volumes" id="nav-volumes">Volumes</a>
+      <a href="{{ base }}/a" id="nav-fleet">Fleet</a>
+    </nav>
+    <div class="surface subtle">porche-web {{ version }}</div>
+  </aside>
+  <div style="flex:1; min-width:0;">
+    <header class="top">
+      <span class="crumb">{% block crumb %}{% endblock %}</span>
+      <span class="meta">{% block meta %}{% endblock %}</span>
+    </header>
+    <main>
+    {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,22 @@
+[package]
+name = "porche-web"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# The console-host (E-28; doc 12 §9): axum + askama (server-rendered) + HTMX
+# (vendored) — no SPA, no JS toolchain. Pure projection of the doc-09 map.
+
+[dependencies]
+axum = "0.8"
+askama = "0.12"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive", "env"] }
+porche-core = { path = "../porche-core" }
+porche-host = { path = "../porche-host" }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
