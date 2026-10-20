@@ -41,6 +41,22 @@ porche-web --surface admin --store /var/lib/porche/desired-state.sqlite3 \
     --user-token "$PORCHE_WEB_USER_TOKEN" --admin-token "$PORCHE_WEB_ADMIN_TOKEN"
 ```
 
+**MS-2 tenancy**: instead of (or beside) the single `--user-token`, the user
+surface takes `--tenants <file>` — a PoC tenant map (E-31.3: static tokens,
+no issuance/rotation; every page footer carries the PoC-auth marker):
+
+```json
+{
+  "t0": { "token": "…", "quota": { "vcpu": 16, "ram_mib": 16384, "workloads": 10 } },
+  "t1": { "token": "…", "quota": { "vcpu": 2,  "ram_mib": 512,   "workloads": 3 } }
+}
+```
+
+Each token scopes the user surface to exactly its tenant: lists, details,
+console tails, stop/delete (cross-tenant = 404, never a leak or a wipe);
+quota (vCPU/RAM/count) is enforced before the create persists. The admin
+surface sees all tenants. A legacy `--user-token` maps to `t0`.
+
 Both processes need both tokens so that a cross-domain request is answered with
 the contract's strict **401** (not a 404 from the "wrong" binary); `/w` accepts
 ONLY the user token, `/a` ONLY the admin token.
