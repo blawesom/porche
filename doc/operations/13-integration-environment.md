@@ -137,12 +137,28 @@ Region `eu-west-2`; subregion `eu-west-2a`. Credentials: local `~/.osc/config.js
 8. Public IPs are allocated and linked explicitly (`CreatePublicIp` + `LinkPublicIp`).
 9. CLH v54 CLI: `--cpus boot=N`, `--memory size=NM` — first thing the host-agent encodes.
 10. **CLI = `octl`** (v0.0.34, static Go binary, Sigstore-verified at install; successor of
-    the legacy `osc-cli`): `octl iaas api <Operation> --profile sandbox`, typed flags.
+    the legacy `osc-cli`): `octl iaas api <Operation> --profile use2`, typed flags.
     Two lessons: the legacy `osc-cli` passed CLI strings through verbatim, so
     `--NestedVirtualization true` sent string `"true"` and the API rejected it with 4110 —
     a Python SDK shim (`bin/osc-api.py`) existed just for that, now deleted because octl's
-    flags are typed. And **only the `sandbox` profile of `~/.osc/config.json` is ever used**
-    (the file holds two profiles; the other is out of bounds for this project).
+    flags are typed. And **only the `use2` profile of `~/.osc/config.json` is ever
+    used** (replaces `sandbox`, 2026-10-23; other profiles in that file are out of
+    bounds for this project).
+    **Addendum (2026-10-23, tenant switch)**: `use2` is a **new cloud tenant on a new
+    cloud region** — not a rename of the old account. Every pinned resource ID in this
+    doc and `infra/integration/BOUNDARIES.md` (dedicated group `ded-53c8318b`,
+    `vol-ad0f8082`, `i-b48c9483` / `i-622da7f6`, keypair `porche-integ2`, SGs) is a
+    **historical record of the old tenant (`sandbox`, region `eu-west-2`)** and **does
+    not exist** under `use2`: `make inventory` there comes back empty by design. The
+    environment is **provisioned fresh** in the new tenant/region per the §5 recipe
+    (capacity ladder §4.15 and VM-type availability were validated on the old region —
+    re-verify there); re-pin new IDs by procedure after provisioning. Never edit the
+    historical IDs to match the new tenant — §6/BOUNDARIES stay as the old
+    environment's record.
+    OMI rebuilt in `use2` 2026-10-23 (`ami-c804ee38`, snapshot `snap-5b4aedb6`,
+    same pinned FCOS build — record: `runs/20261023-use2-tenant/ms5/`; the
+    octl/OOS multipart mechanics and credential-export lessons are in that
+    record).
 11. **Nets are IPv4-only**: a Net's CIDR must be RFC1918 (/16–/28), public IPs are v4
     (`CreatePublicIp`/`LinkPublicIp`), and there is no v6 Net option. Consequence
     (E-22/E-25): cross-host workload v6 rides a **v6-in-v4 tunnel** here — a transport

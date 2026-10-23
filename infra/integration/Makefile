@@ -1,17 +1,18 @@
 .PHONY: init fmt validate guard plan apply up down snapshot inventory verify teardown-help
 
 # --- credentials (never stored in the repo) ---
-# SANDBOX ACCOUNT ONLY (operator rule). ~/.osc/config.json holds two
-# profiles (perso, sandbox); only 'sandbox' is ever used here. The
+# USE2 TENANT ONLY (operator rule, 2026-10-23: a NEW cloud tenant + region — the
+# old `sandbox` tenant's resources are historical, doc 13 §4.10). The `use2`
+# profile of ~/.osc/config.json is the only profile ever used here. The
 # Makefile hard-pins OSC_PROFILE and every octl call passes an explicit
-# --profile sandbox (an explicit profile overrides stray OSC_* env
+# --profile use2 (an explicit profile overrides stray OSC_* env
 # vars). 'guard' fail-closes the mutating targets on anything else.
 OSC_CONFIG ?= $(HOME)/.osc/config.json
-OSC_PROFILE := sandbox
+OSC_PROFILE := use2
 export OSC_PROFILE
-export OSC_ACCESS_KEY := $(shell jq -r .sandbox.access_key $(OSC_CONFIG) 2>/dev/null)
-export OSC_SECRET_KEY := $(shell jq -r .sandbox.secret_key $(OSC_CONFIG) 2>/dev/null)
-export OSC_REGION     := $(shell jq -r .sandbox.region $(OSC_CONFIG) 2>/dev/null)
+export OSC_ACCESS_KEY := $(shell jq -r .use2.access_key $(OSC_CONFIG) 2>/dev/null)
+export OSC_SECRET_KEY := $(shell jq -r .use2.secret_key $(OSC_CONFIG) 2>/dev/null)
+export OSC_REGION     := $(shell jq -r .use2.region $(OSC_CONFIG) 2>/dev/null)
 
 TF := tofu
 OCTL := octl
@@ -25,14 +26,14 @@ fmt:
 validate:
 	$(TF) validate
 
-# Fail-closed account guard: refuse to touch anything but the sandbox
+# Fail-closed account guard: refuse to touch anything but the use2
 # account. Also catches a broken or missing ~/.osc/config.json before
 # tofu/octl produce a confusing failure (or worse, a wrong account).
 guard:
-	@test "$(OSC_PROFILE)" = "sandbox" || { echo "REFUSED: OSC_PROFILE='$(OSC_PROFILE)' — only the sandbox account is permitted"; exit 1; }
-	@jq -e '.sandbox | has("access_key") and has("secret_key") and has("region")' $(OSC_CONFIG) >/dev/null \
-	  || { echo "REFUSED: no usable 'sandbox' profile in $(OSC_CONFIG)"; exit 1; }
-	@test -n "$(OSC_ACCESS_KEY)" || { echo "REFUSED: sandbox credentials did not resolve (jq on $(OSC_CONFIG))"; exit 1; }
+	@test "$(OSC_PROFILE)" = "use2" || { echo "REFUSED: OSC_PROFILE='$(OSC_PROFILE)' — only the use2 account is permitted"; exit 1; }
+	@jq -e '.use2 | has("access_key") and has("secret_key") and has("region")' $(OSC_CONFIG) >/dev/null \
+	  || { echo "REFUSED: no usable 'use2' profile in $(OSC_CONFIG)"; exit 1; }
+	@test -n "$(OSC_ACCESS_KEY)" || { echo "REFUSED: use2 credentials did not resolve (jq on $(OSC_CONFIG))"; exit 1; }
 
 # Always plan to a file. Review it line by line before apply:
 # the ONLY acceptable plan is '+' (create) lines for porche-integ-*
@@ -77,11 +78,11 @@ snapshot:
 	@ls -t state-backups | head -3
 
 # Read-only account inventory — regenerate BOUNDARIES.md before any
-# change touching resource boundaries. octl, sandbox profile only.
+# change touching resource boundaries. octl, use2 profile only.
 inventory: guard
-	$(OCTL) iaas api ReadVms --profile sandbox | jq '[.Vms[] | {VmId, VmType, State, Tenancy: .Placement.Tenancy, KeypairName, SecurityGroups: [.SecurityGroups[].SecurityGroupId]}]'
-	$(OCTL) iaas api ReadVolumes --profile sandbox | jq '[.Volumes[] | {VolumeId, Size, State, VolumeType, LinkedVms: [(.LinkedVolumes // [])[] | .VmId]}]'
-	$(OCTL) iaas api ReadPublicIps --profile sandbox | jq '[.PublicIps[] | {PublicIpId, PublicIp, VmId: (.VmId // null)}]'
+	$(OCTL) iaas api ReadVms --profile use2 | jq '[.Vms[] | {VmId, VmType, State, Tenancy: .Placement.Tenancy, KeypairName, SecurityGroups: [.SecurityGroups[].SecurityGroupId]}]'
+	$(OCTL) iaas api ReadVolumes --profile use2 | jq '[.Volumes[] | {VolumeId, Size, State, VolumeType, LinkedVms: [(.LinkedVolumes // [])[] | .VmId]}]'
+	$(OCTL) iaas api ReadPublicIps --profile use2 | jq '[.PublicIps[] | {PublicIpId, PublicIp, VmId: (.VmId // null)}]'
 
 # Post-"make up" verification. The co-location gate is the critical one:
 # both metal nodes must sit on the same physical server of the group,

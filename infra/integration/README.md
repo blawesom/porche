@@ -16,10 +16,14 @@ and battle-tested, per the corpus's stack rule.
 
 The Outscale account is **shared**. This configuration therefore:
 
-- **uses the `sandbox` profile only** (`~/.osc/config.json` holds two
-  profiles, `perso` and `sandbox`; `perso` is never referenced). The
+- **targets the `use2` tenant — a NEW cloud tenant on a new region
+  (2026-10-23; doc 13 §4.10: the old `sandbox` tenant's pinned resources are
+  historical and do not exist there — the environment is provisioned
+  fresh) and uses only its profile**: the `use2` profile of
+  `~/.osc/config.json` is the only permitted one; other profiles that
+  may exist in that file (e.g. `perso`) are never referenced. The
   Makefile hard-pins `OSC_PROFILE`, every `octl` call passes an
-  explicit `--profile sandbox` (an explicit profile overrides stray
+  explicit `--profile use2` (an explicit profile overrides stray
   `OSC_*` env vars), and `make guard` fail-closes the mutating
   targets on anything else.
 - **manages only net-new resources** (node 2, BSUs, NFS VM, CP VM, new
@@ -33,10 +37,10 @@ The Outscale account is **shared**. This configuration therefore:
 ## First run
 
 ```sh
-export OSC_PROFILE=sandbox
-export OSC_ACCESS_KEY=$(jq -r .sandbox.access_key ~/.osc/config.json)
-export OSC_SECRET_KEY=$(jq -r .sandbox.secret_key ~/.osc/config.json)
-export OSC_REGION=$(jq -r .sandbox.region ~/.osc/config.json)
+export OSC_PROFILE=use2
+export OSC_ACCESS_KEY=$(jq -r .use2.access_key ~/.osc/config.json)
+export OSC_SECRET_KEY=$(jq -r .use2.secret_key ~/.osc/config.json)
+export OSC_REGION=$(jq -r .use2.region ~/.osc/config.json)
 
 make init
 make plan          # writes tfplan
@@ -70,7 +74,7 @@ Automation of this check is an open item (doc 13 §8 / `make verify`).
 ## Cost rule (doc 13 §7)
 
 Dedicated servers are billed while the group's VMs run. **Stop the
-metal VMs when idle** (`octl iaas api UpdateVms --profile sandbox
+metal VMs when idle** (`octl iaas api UpdateVms --profile use2
 --VmIds ... --State stopped` — or the console; `tofu` state edit is
 NOT the way; TF manages lifecycle, not day-2 stop/start).
 

@@ -16,7 +16,7 @@
 #     declaring them forces a REPLACEMENT (prevent_destroy would
 #     block the plan — by design).
 #   - if a node is ever lost, recreate it with octl
-#     (octl iaas api CreateVms --profile sandbox — typed flags: group
+#     (octl iaas api CreateVms --profile use2 — typed flags: group
 #     tenancy + nested virtualization are real booleans) and re-import.
 #
 # CRITICAL: both nodes must sit on the SAME physical server of the
