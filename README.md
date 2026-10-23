@@ -42,7 +42,8 @@ Full requirements (FR / SEC / PERF / OPS + traceability): doc 01.
    works
 
 Then: doc 07 (PoC scope) · doc 08 (design review + E-register) · doc 12 (software
-architecture) · doc 14 (workload networking). Full set: docs 01–14 live under
+architecture) · doc 14 (workload networking) · doc 15 (product gap / demo
+readiness). Full set: docs 01–15 live under
 `doc/{spec,design,decisions,operations}/` — doc numbers are stable IDs
 (`doc 14 §3` = §3 of `doc/design/14-workload-networking.md`); new topics land as
 sections of existing documents, a new corpus file needs an E-register row (doc 08 §E).
