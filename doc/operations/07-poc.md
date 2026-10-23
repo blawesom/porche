@@ -1,6 +1,19 @@
 # 07 — PoC Scope (pre-P0)
 <!--
   history: v1..v9 see git log (§E-29 rollback re-baselined this file).
+  **v12 (2026-10-23)**: §7.5 rebaselined by operator — gate classes split:
+  §7.5.1 software gates (function + software perf: convergence, wedge/drift,
+  rollback cleanliness, use-case flows) are verdicts in the integration
+  environment; §7.5.2 hardware-bound rows (latency/throughput/RSS absolutes)
+  are recorded there and gated on the hardware (metal) run (E-16 restated:
+  integration gates software, the hardware run gates performance). Ledger:
+  new MS-6 = software validation (function + software perf) via
+  `harness/sw-suite.sh` + `harness/uc-suite.sh`; the growth row renumbered
+  **MS-6+ → MS-7+** (its historical references stay as written).
+  Infra: `use2` is a NEW tenant + region (doc 13 §4.10) — the tofu state in
+  `infra/integration/` holds old-tenant imported IDs and is historical;
+  archive it before any `make plan`/`apply` against `use2` (zero-state
+  provisioning via the doc-13 §5 recipe, never state edits).
   **v11 (2026-10-20, E-31)**: ledger reordered by operator — MS-2 = tenancy +
   console onboarding (multitenancy slice before scale); subsequent rows
   renumbered (scale → MS-3, escape → MS-4, recorded run → MS-5, growth →
@@ -47,8 +60,9 @@ not after building a control plane around it.
 | Networking | per-VM netns set up by host-agent, **v6 single-host** (the guest gets its /128 via the cmdline key — E-22/E-25; no exposure, no cross-host v6 — deferred) | — |
 | Test harness | scripted: boot-time measurement, 20 parallel VMs, 1,000× create/wipe loop, residual-memory probe, 3 public escape PoCs — **each run against an unhardened baseline and the hardened config, validated by the delta (E-7/E-18)**: virtio-net offload attack (PwnEscape class) → SEC-7/I-7; virtio device-model escape against CLH → SEC-3/4; 2026 page-cache/userns kernel cluster → SEC-11 (+ boot-time sysctl check). Reproducing a published escape is **outside** the PoC estimate (E-18) | PERF-1/5/8 subset (smoke — E-16), SEC-40 seed, doc 01 criteria 2/6/7 |
 
-**Success criteria** (all measurable, nothing subjective; PERF rows are **smoke signals
-here** — authoritative numbers are measured on metal at the P1 gates, E-16):
+**Success criteria** (all measurable, nothing subjective; verdict classes per §7.5 —
+software rows gate in the integration environment, hardware-bound PERF rows are **smoke
+signals here** and gate on the hardware run, E-16):
 
 - [ ] Workload create → process running in guest: P50 < 1.5 s (PERF-1 — smoke)
 - [ ] 20 parallel microVMs stable, < 200 MB RSS each at rest (PERF-5 — smoke)
@@ -187,18 +201,44 @@ VMs' guests; full real-PoC artifacts move to the metal run / SEC-40.
 
 ### 7.5 Results record (the PoC exit artifact)
 
+**Gate classes (v12 rebaseline)**: the same split §6 already uses for kill
+criteria — **functional in the integration environment, perf on the metal
+validation run** (E-16) — now names the exit rows explicitly. §7.5.1 holds the
+**functional/software** rows (convergence, teardown determinism, leak/wedge/
+drift, rollback cleanliness, use-case flows): every threshold carrying a
+hardware-bound unit (ms, MB/s, ×, absolute RSS/latency) is **recorded** here and
+**gated** on the **metal validation run** (§7.5.2). Rule of thumb: a threshold
+containing "ms", "MB/s" or "×" is a perf row (metal-gated); a threshold
+containing "0", "clean", "no", "every" is a functional row (integration-gated).
+
+#### 7.5.1 Software gates — integration (verdicts here)
+
 | Criterion | Method | n | Threshold | Measured | Verdict |
 |---|---|---|---|---|---|
-| PERF-1 (smoke) | console marker | 100 | P50 < 1.5 s | P50 1495 ms, P99 1511 ms | **pass** (`20261020-MS3`) |
-| PERF-5 (smoke) | RSS sampler | 20 | < 200 MB each | max 105 MB | **pass** (`20261020-MS3`) |
-| PERF-8 loop (**gate**) | create/wipe | 1,000 | no wedge, < 5 % drift | 0 wedge, 0.85 % drift | **pass** (`20261020-MS3`) |
-| PERF-8 timing (smoke) | per-cycle | 1,000 | P99 < 2 s | P50 329 ms, P99 355 ms | **pass** (`20261020-MS3`) |
+| PERF-8 loop | create/wipe | 1,000 | no wedge, < 5 % drift | 0 wedge, 0.85 % drift | **pass** (`20261020-MS3`) |
 | Wipe probe | markers + key slots | all (1,000) | no recoverable data | 0 probe failures | **pass** (`20261020-MS3`) |
 | Escape delta | §7.3 toggles | 3 | delta present | all 3 classes: delta demonstrated (offload path, device surface, kernel primitives) | **pass** (`20261020-MS4`) |
 | Sysctl script | boot assert | every boot | all pass | | every boot asserted (§4.13 node recipe; `20261020-MS3` boot included) |
+| Rollback cleanliness | deliberate create failure (missing kernel) | 10 | every cycle: row `Failed` + no netns/veth/mapper/keyfile residue | | pending (`harness/sw-suite.sh`, MS-6) |
+| Re-create idempotency | create → wipe → same-id create | 10 | every cycle converges; 0 RTNETLINK "File exists" | | pending (`harness/sw-suite.sh`, MS-6) |
+| Concurrency smoke | 20 parallel creates + concurrent reads | 1 | 0 errors, 0 lock timeouts | | pending (`harness/sw-suite.sh`, MS-6) |
+| Use-case U1 (AI agent) | console create → done(rc) → delete → wipe report | 1 | every FR-2 transition observed | | pending (`harness/uc-suite.sh`, MS-6) |
+| Use-case U2 (CI job) | bursty job + volume → done → stop-then-wipe | 1 | `stopped` stays `stopped`; wipe all-pass | | pending (`harness/uc-suite.sh`, MS-6) |
+| Negative paths | duplicate id, over-quota, cross-tenant, wrong domain, invalid spec, stop-non-running | each ≥1 | each rejected as specified (404/401, no row leak) | | pending (`harness/uc-suite.sh`, MS-6) |
+| Negative: wipe-while-`Stopping` | race attempt only — the `Stopping` window is transient (`ops::stop` converges synchronously; forcing it would need store tampering) | 1 attempt + unit tests | `Wipe` rejects `Stopping` with `WrongState` — pinned by `porche-core` tests (`ops.rs`); the race attempt must leave no half-torn state | | pending (`harness/uc-suite.sh` rec + `ops.rs` tests) |
 
-The filled table plus the §7.1 fixture record is committed with the run; the PoC is done
-when the table is green — or a §6 kill criterion fired.
+#### 7.5.2 Hardware-bound rows — recorded in integration, gated on the hardware run
+
+| Criterion | Method | n | Threshold | Recorded (integration) | Verdict (hardware run) |
+|---|---|---|---|---|---|
+| PERF-1 | console marker | 100 | P50 < 1.5 s | P50 1495 ms, P99 1511 ms (`20261020-MS3`) | pending — gated on hardware run |
+| PERF-5 | RSS sampler | 20 | < 200 MB each; ≥100/host at 64 GB (hardware run) | max 105 MB (`20261020-MS3`) | pending — gated on hardware run |
+| PERF-8 timing | per-cycle | 1,000 | P99 < 2 s | P50 329 ms, P99 355 ms (`20261020-MS3`) | pending — gated on hardware run |
+| Wipe (TRIM physical claim) | discard report | every wipe | NAND-level claim | discard report recorded | pending — gated on hardware run |
+
+The filled tables plus the §7.1 fixture record are committed with the run; the software
+suite is done when §7.5.1 is green (MS-6) or a §6 kill criterion fired; the PoC's
+performance claims are made only from the hardware run's §7.5.2 verdicts.
 
 ---
 
@@ -311,7 +351,8 @@ eyes.
 | MS-3 | scale harness (WS-D) | PERF-1 n=100, PERF-5 n=20, PERF-8 1,000-cycle **gate**, drift/wedge/wipe-probe checks | filled §7.5 rows + CSVs/console logs; user test = the harness web/walkthrough covering the new results page (if surfaced) or the run report | **complete** — closed 2026-10-20, operator walked the report (verdict recorded in `runs/20261020-MS3/ms3/results.md`); harness `fc536dc`, run `bd49189`: gate 0 wedge / 0.85 % drift, PERF-1 P50 1495 ms, PERF-5 max 105 MB, wipe probes 1,000/1,000 |
 | MS-4 | escape delta (WS-E) | 3 classes × hardened/baseline (§7.3), §7.4 safety, delta verdicts only (E-18) | per-class paired run artifacts; user test = operator walk of the delta report | **complete** — closed 2026-10-20, operator walked the report (verdict recorded in `runs/20261020-MS4/ms4/results.md`); all 3 classes delta-present with mechanism evidence (`20261020-MS4`, tip `1b4caa7`); the class-1 baseline no-op (CLH v54 defaults offloads OFF) found and fixed en route; §7.5 escape-delta row green — the exit table is fully measured |
 | MS-5 | recorded run (WS-F) | FCOS stable OMI (doc 13 §8); full suite | the §7.5 record complete; user test = the record's sign-off walk | pending |
-| MS-6+ | console/object growth per doc 09's map (audit view, tokens, volumes CRUD, deeper topology) | enters only inside a milestone window; its user test covers the new surface alongside existing flows | updated `user-test.md` per milestone | pending |
+| **MS-6** | **software validation (function + software perf, v12 gate split)** | `harness/sw-suite.sh` (§7.5.1 software gates: 1,000-cycle loop wedge/drift/probe, rollback cleanliness on deliberate create failure, re-create idempotency, concurrency smoke) + `harness/uc-suite.sh` (use cases U1/U2 end-to-end + FR-2 transitions + the negative path set) — Outscale cloud profile **`use2`** (doc 13 §4.10); timing rows are recorded only (§7.5.2) | filled §7.5.1 rows + scenario artifacts under `runs/<id>/ms6/`; user test = the operator walks the two scenario reports + negative-path evidence | pending |
+| MS-7+ | console/object growth per doc 09's map (audit view, tokens, volumes CRUD, deeper topology) | enters only inside a milestone window; its user test covers the new surface alongside existing flows | updated `user-test.md` per milestone | pending |
 
 "User test language" in every row means the recorded human UAT covers **every page and
 every operation** of the surfaces that milestone touches (the MS-1 user-test order is
