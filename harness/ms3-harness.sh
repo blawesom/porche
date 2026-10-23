@@ -52,10 +52,6 @@ for i in $(seq 1 100); do
   $AGENT wipe "$id" >/dev/null 2>&1 || true
 done
 # percentiles
-python3 - <<'EOF' >> "$RD/perf1.txt"
-import csv
-rows = [int(r[1]) for r in csv.reader(open("$RD/perf1.csv".replace("$RD","RD_PLACEHOLDER") or "/dev/null"))] if False else None
-EOF
 awk -F, '{print $2}' "$RD/perf1.csv" | sort -n > "$RD/perf1.sorted"
 n=$(wc -l < "$RD/perf1.sorted")
 p50=$(sed -n "$((n/2))p" "$RD/perf1.sorted")
