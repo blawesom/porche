@@ -1,0 +1,53 @@
+FCOS OMI import for the use2 tenant (tenant switch, doc 13 §4.10) — 2026-10-23
+==============================================================================
+source: Fedora CoreOS stable 44.20260913.3.2, openstack variant — the SAME pinned
+  build as MS-5.M1 (runs/20261020-MS5/ms5/01-omi-import.txt)
+  https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/44.20260913.3.2/x86_64/fedora-coreos-44.20260913.3.2-openstack.x86_64.qcow2.xz
+  xz sha256: ff3079bf7a5bd799ffbf974ad8c161ee06255948d909f9e1a954f3665f0ce901 (verified at download)
+  uncompressed sha256: 59f357c672dc8f8323fe49afbe96ab60382d55cca62fdbfe306f0071baf2bba9 (verified after decompress)
+  qcow2 virtual size: 10737418240 (10 GiB — pinned from the MS-5.M1 record; no
+  qemu-img on the import box, so the virtual size is asserted from the record,
+  not re-derived locally)
+
+tenant: use2 — NEW cloud tenant, region us-east-2 (doc 13 §4.10 addendum: the old
+  `sandbox`/eu-west-2 tenant's ami-5db9886d does not exist here; this import is
+  the fresh-environment equivalent of MS-5.M1)
+
+result:
+  snapshot: snap-5b4aedb6 (10 GiB, completed 2026-10-23 ~11:02 UTC)
+  image: ami-c804ee38 (porche-fcos-44.20260913.3.2, available, x86_64,
+    rootDeviceName /dev/sda1, gp2 10 GiB bsu mapping, DeleteOnVmDeletion true)
+
+path: qcow2 -> OOS bucket porche-use2-ms5 (use2 tenant), MULTIPART upload
+  (final upload id a29b2d9f36f04b18983b4c88d352487b — completed from the
+  server-side ListParts; one earlier 8 MiB-part attempt, upload id
+  15511c8a26f340908ca766cadb4dc263, was aborted cleanly after its etag
+  parsing broke — no dangling upload remains, verified by
+  ListMultipartUploads: Uploads null) ->
+  presigned URL (`octl storage object presign`, tool + expiry recorded here so
+  this run replays: default X-Amz-Expires=900 s was sufficient because the
+  snapshot import pulls the object server-side from OOS — the 15 min window
+  only needs to cover the CreateSnapshot call, not a client download) ->
+  CreateSnapshot (SnapshotSize = 10737418240 — the recorded
+  MS-5.M1 lesson applied) -> CreateImage (RootDeviceName + Bsu.SnapshotId; the
+  flat --SnapshotId flag does not exist on CreateImage — 7006 requires one of
+  FileLocation/RootDeviceName/SourceImageId/VmId)
+
+lessons (octl/storage mechanics, recorded for the next import):
+- octl storage (OOS) does NOT read iaas-style profile credentials by itself:
+  OSC_ACCESS_KEY/OSC_SECRET_KEY/OSC_REGION must be exported from the use2
+  profile (jq .use2.*) — with only --profile use2 the OOS calls fail with
+  "static credentials are empty".
+- a single 2 GiB PutObject exceeds a 900 s shell ceiling on this box; multipart
+  works: CreateMultipartUpload -> UploadPart (--Body <file>; the streamed
+  stdin mode --Body - fails immediately) -> CompleteMultipartUpload. 31 parts
+  x 64 MiB took ~42 min wall (~80 s/part).
+- CompleteMultipartUpload payload must be built from the SERVER-side ListParts
+  (authoritative ETags; the raw output is the usable one — the default output
+  prints null): jq '[.Parts[] | {PartNumber, ETag}] | sort_by(.PartNumber)'.
+  ETags come back with embedded quotes ("\"abc\"") — do not re-quote them.
+- CreateImage with --BlockDeviceMappings.0.* flags hits "too many arguments";
+  use --payload JSON with RootDeviceName set (7006 otherwise).
+
+cleanup after image creation: the bucket object (and bucket porche-use2-ms5)
+are deletable — the completed snapshot no longer references the presigned URL.
