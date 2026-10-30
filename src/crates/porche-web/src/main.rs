@@ -18,7 +18,9 @@
 //! audit-trail entry (E-26). The audit trail has no VIEW page at MS-1
 //! (doc 09 MVP cuts) — the file is the record.
 
+mod adapter_poc;
 mod audit;
+mod console_api;
 mod handlers;
 mod state;
 
@@ -30,11 +32,11 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 pub struct AppState {
-    pub store: SqliteStore,
+    pub store: Arc<SqliteStore>,
     /// host-agent ops take `&mut` — mutations hold this lock (stage 1, E-28)
-    pub exec: Mutex<DirectExecutor>,
+    pub exec: Arc<Mutex<DirectExecutor>>,
     pub data_dir: PathBuf,
-    pub audit: Mutex<AuditLog>,
+    pub audit: Arc<Mutex<AuditLog>>,
     /// `/w` domain token (env PORCHE_WEB_USER_TOKEN)
     pub user_token: Option<String>,
     /// `/a` domain token (env PORCHE_WEB_ADMIN_TOKEN)
@@ -50,6 +52,11 @@ pub struct AppState {
     /// dev.laplane.net's HAProxy; empty = direct loopback access). The
     /// middleware strips it before routing; redirects/cookie re-add it.
     pub base_path: String,
+    /// The console's API seam (doc 12 §9, E-28): every user-surface page
+    /// speaks this, never `store`/`ops` directly. PoC: the in-process adapter
+    /// (store + host-agent ops). P1: swap the type to the plane clients —
+    /// the UIs do not change (the doc-15 P0 debt this field closes).
+    pub api: adapter_poc::PocConsole,
 }
 
 /// htmx, vendored (E-28 — no CDN) for live fragments only: console-log tail
@@ -263,21 +270,38 @@ async fn main() {
     std::fs::create_dir_all(&cli.data_dir)
         .unwrap_or_else(|e| panic!("porche-web: data dir {}: {e}", cli.data_dir.display()));
 
-    let store = SqliteStore::open(&cli.store)
-        .unwrap_or_else(|e| panic!("porche-web: store {}: {e}", cli.store.display()));
+    let store = Arc::new(
+        SqliteStore::open(&cli.store)
+            .unwrap_or_else(|e| panic!("porche-web: store {}: {e}", cli.store.display())),
+    );
     // E-29: real execution only — `Runner::Dry` and `--dry` do not exist.
-    let exec = DirectExecutor::new(Runner::Shell, &cli.data_dir, &cli.keys_file);
+    let exec = Arc::new(Mutex::new(DirectExecutor::new(
+        Runner::Shell,
+        &cli.data_dir,
+        &cli.keys_file,
+    )));
+    let audit = Arc::new(Mutex::new(AuditLog::open(
+        cli.data_dir.join("console-audit.jsonl"),
+    )));
+    let api = adapter_poc::PocConsole::new(
+        Arc::clone(&store),
+        Arc::clone(&exec),
+        cli.data_dir.clone(),
+        tenants.clone(),
+        Arc::clone(&audit),
+    );
 
     let state = Arc::new(AppState {
         store,
-        exec: Mutex::new(exec),
+        exec,
         data_dir: cli.data_dir.clone(),
-        audit: Mutex::new(AuditLog::open(cli.data_dir.join("console-audit.jsonl"))),
+        audit,
         user_token: cli.user_token.clone(),
         admin_token: cli.admin_token.clone(),
         clh: ClhPin::detect(),
         tenants: tenants.clone(),
         base_path: base_path.clone(),
+        api,
     });
 
     let port = cli.port.unwrap_or_else(|| cli.surface.default_port());

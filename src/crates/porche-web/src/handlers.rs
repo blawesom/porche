@@ -6,6 +6,7 @@
 //! mode anywhere (E-29).
 
 use crate::audit::epoch_utc;
+use crate::console_api::{ApiError, CallCtx, ConsoleApi};
 use crate::state::*;
 use crate::AppState;
 use askama::Template;
@@ -15,10 +16,7 @@ use axum::middleware::Next;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::Router;
-use porche_core::{
-    ops, AdmitOutcome, DesiredStateStore, QuotaLimits, Record, VolumeSpec, WorkloadSpec,
-    WorkloadState,
-};
+use porche_core::{DesiredStateStore, Record, VolumeSpec, WorkloadSpec, WorkloadState};
 use std::sync::Arc;
 
 pub fn router(state: Arc<AppState>) -> Router {
@@ -365,12 +363,6 @@ struct ImageOpt {
     selected: bool,
 }
 
-fn manifest_lines(dir: &std::path::Path) -> String {
-    std::fs::read_to_string(dir.join("manifest.txt"))
-        .map(|s| s.lines().collect::<Vec<_>>().join(" · "))
-        .unwrap_or_default()
-}
-
 /// `sha256:<64 hex>` → `sha256:<first 10 hex>…`
 fn short_digest(name: &str) -> String {
     if let Some(h) = name.strip_prefix("sha256:") {
@@ -381,27 +373,18 @@ fn short_digest(name: &str) -> String {
     name.to_string()
 }
 
-fn image_options(app: &AppState, selected_for: &str) -> Vec<ImageOpt> {
-    let mut names: Vec<String> = std::fs::read_dir(app.data_dir.join("images"))
-        .map(|rd| {
-            rd.filter_map(|e| e.ok())
-                .map(|e| e.file_name().to_string_lossy().into_owned())
-                .collect()
-        })
-        .unwrap_or_default();
-    names.sort();
-    names
+/// The create form's image options — the `ListImages` read through the API
+/// seam, mapped to the select's view model.
+fn image_options(app: &AppState, ctx: &CallCtx, selected_for: &str) -> Vec<ImageOpt> {
+    app.api
+        .list_images(ctx)
+        .unwrap_or_default()
         .into_iter()
-        .map(|name| {
-            let manifest = manifest_lines(&app.data_dir.join("images").join(&name));
-            let selected = name == selected_for;
-            let short = short_digest(&name);
-            ImageOpt {
-                name,
-                short,
-                manifest,
-                selected,
-            }
+        .map(|i| ImageOpt {
+            short: short_digest(&i.digest),
+            selected: i.digest == selected_for,
+            name: i.digest,
+            manifest: i.manifest,
         })
         .collect()
 }
@@ -441,23 +424,12 @@ struct WorkloadsPage {
     records: Vec<WorkloadRow>,
 }
 
-/// Tenant context extractor for handlers — the user surface is ALWAYS
-/// tenant-scoped (MS-2 view isolation). A missing context (route reached
-/// without the middleware — a bug) fails closed as t0 rather than open.
-fn tenant_ctx(req: &axum::http::Request<axum::body::Body>) -> TenantCtx {
-    req.extensions()
-        .get::<TenantCtx>()
-        .cloned()
-        .unwrap_or(TenantCtx {
-            tenant_id: "t0".into(),
-        })
-}
 async fn workloads(
     State(app): State<Arc<AppState>>,
     Extension(t): Extension<TenantCtx>,
 ) -> Html<String> {
-let t = t;
-    let records = app.store.list_for_tenant(&t.tenant_id).unwrap_or_default();
+    let ctx = CallCtx::read(&t.tenant_id);
+    let records = app.api.list_workloads(&ctx).unwrap_or_default();
     let rows = records.iter().map(|r| row_of(&app, r)).collect();
     WorkloadsPage {
         version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
@@ -489,7 +461,10 @@ struct WorkloadFormPage {
     images: Vec<ImageOpt>,
 }
 
-async fn create_form(State(app): State<Arc<AppState>>) -> Html<String> {
+async fn create_form(
+    State(app): State<Arc<AppState>>,
+    Extension(t): Extension<TenantCtx>,
+) -> Html<String> {
     WorkloadFormPage {
         version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
         error: None,
@@ -500,7 +475,7 @@ async fn create_form(State(app): State<Arc<AppState>>) -> Html<String> {
             gw6: "fd42:1:1::ff".into(),
             ..Default::default()
         },
-        images: image_options(&app, ""),
+        images: image_options(&app, &CallCtx::read(&t.tenant_id), ""),
     }
     .render()
     .unwrap()
@@ -543,12 +518,6 @@ let t = t;
         gw6: form.gw6.clone(),
     };
 
-    // The doc-15 create-path race closed (2026-10-30): duplicate-id and
-    // MS-2.M3 quota (FR-5 skeleton) checks and the row insert are ONE atomic
-    // store admission — two concurrent creates can never both pass (the old
-    // check-then-act read the store outside the insert's critical section).
-    // The id check is tenant-global: workload ids are host-global device
-    // names — two tenants cannot both claim netns w-foo.
     let spec = build_spec(&form, &t.tenant_id);
     match spec {
         Ok(spec) => {
@@ -563,68 +532,40 @@ let t = t;
                     base: app.base_path.clone(),
                     error: Some(e),
                     form: vals,
-                    images: image_options(&app, &form.image_digest),
+                    images: image_options(&app, &CallCtx::read(&t.tenant_id), &form.image_digest),
                 }
                 .render()
                 .unwrap())
                 .into_response();
             }
-            // quota resolution stays with the tenant config (E-31.3); the
-            // enforcement moved INTO the store admission (a tenant absent
-            // from the config is unquota'd — the operator path)
-            let quota = app
-                .tenants
-                .iter()
-                .find(|(tid, _)| *tid == t.tenant_id)
-                .map(|(_, e)| QuotaLimits {
-                    vcpu: e.quota.vcpu,
-                    ram_mib: e.quota.ram_mib,
-                    workloads: e.quota.workloads,
-                });
-            // MS-1 u03: the row must be observably `pending` (workspace state
-            // Creating) before convergence runs — CreateWorkload returns
-            // immediately; the real executor converges in the background and
-            // the detail page's poll observes pending → running → done (rc=N).
-            let rejected = match app
-                .store
-                .admit_create(&spec, &WorkloadState::Creating, quota.as_ref())
-            {
-                Ok(AdmitOutcome::Admitted) => None,
-                Ok(AdmitOutcome::DuplicateId) => {
-                    Some(format!("workload {:?} already exists", form.id.trim()))
+            // CreateWorkload through the API seam (doc 12 §9): the adapter
+            // does the atomic admission (duplicate-id + tenant quota +
+            // insert — one critical section, the doc-15 create-path race
+            // closed) and spawns the convergence; the row is observably
+            // `pending` (Creating) when the redirect lands (MS-1 u03).
+            let ctx = CallCtx::mutate(&t.tenant_id, &actor);
+            match app.api.create_workload(&ctx, spec) {
+                Ok(()) => {}
+                Err(ApiError::Rejected(e)) | Err(ApiError::Failed(e)) => {
+                    audit(&app, &actor, "CreateWorkload", &form.id, &format!("rejected: {e}"));
+                    return Html(WorkloadFormPage {
+                        version: env!("CARGO_PKG_VERSION"),
+                        base: app.base_path.clone(),
+                        error: Some(e),
+                        form: vals,
+                        images: image_options(&app, &CallCtx::read(&t.tenant_id), &form.image_digest),
+                    }
+                    .render()
+                    .unwrap())
+                    .into_response();
                 }
-                Ok(AdmitOutcome::OverQuota(reason)) => Some(reason),
-                Err(e) => Some(format!("store: {e}")),
-            };
-            if let Some(e) = rejected {
-                audit(&app, &actor, "CreateWorkload", &form.id, &format!("rejected: {e}"));
-                return Html(WorkloadFormPage {
-                    version: env!("CARGO_PKG_VERSION"),
-                    base: app.base_path.clone(),
-                    error: Some(e),
-                    form: vals,
-                    images: image_options(&app, &form.image_digest),
+                Err(ApiError::NotFound(e)) => {
+                    audit(&app, &actor, "CreateWorkload", &form.id, &format!("rejected: {e}"));
+                    return not_found_page(&app, &e, "/w").into_response();
                 }
-                .render()
-                .unwrap())
-                .into_response();
             }
-            let app2 = app.clone();
-            let id = spec.id.clone();
-            let actor_bg = actor.clone();
-            tokio::task::spawn_blocking(move || {
-                let mut ex = app2.exec.lock().unwrap();
-                let r = ops::create(&app2.store, &mut *ex, spec);
-                let outcome = match r {
-                    Ok(()) => "ok (converged)".to_string(),
-                    Err(e) => format!("failed: {e}"),
-                };
-                app2
-                    .audit
-                    .lock()
-                    .unwrap()
-                    .record(&actor_bg, "CreateWorkload", &id, &outcome);
-            });
+            // the convergence spawn + the settle audit entry live in the
+            // adapter now — the page layer projects, the seam executes
             audit(&app, &actor, "CreateWorkload", &form.id, "ordered");
             Redirect::to(&format!("/w/{}", form.id)).into_response()
         }
@@ -634,7 +575,7 @@ let t = t;
                 version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
                 error: Some(e.to_string()),
                 form: vals,
-                images: image_options(&app, &form.image_digest),
+                images: image_options(&app, &CallCtx::read(&t.tenant_id), &form.image_digest),
             }
             .render()
             .unwrap())
@@ -706,16 +647,16 @@ async fn workload_detail(
     Path(id): Path<String>,
     Extension(t): Extension<TenantCtx>,
 ) -> Response {
-let t = t;
-    match app.store.get_for_tenant(&t.tenant_id, &id) {
+    // Get + GetEvents through the seam; the display derivation (E-29:
+    // console markers + socket absence) stays console-side
+    let ctx = CallCtx::read(&t.tenant_id);
+    match app.api.get_workload(&ctx, &id) {
         Ok(Some(r)) => {
+            let events = app
+                .api
+                .get_events(&ctx, &id)
+                .unwrap_or_default();
             let console = read_console(&app.data_dir, &id);
-            let log_mtime = std::fs::metadata(console_path(&app.data_dir, &id))
-                .and_then(|m| m.modified())
-                .ok()
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs() as i64);
-            let events = derive_events(r.created_at, r.updated_at, &console, log_mtime);
             let signals = console_signals(&console);
             let socket = vm_socket_present(&app.data_dir, &id);
             let d = derive_state(&r.state, &signals, socket);
@@ -764,14 +705,12 @@ async fn console_tail(
     Extension(t): Extension<TenantCtx>,
 ) -> Html<String> {
     // GetConsole — the recorded serial log tail (MS-1: recorded half).
-    // Tenant-scoped: a cross-tenant id returns an empty tail, never another
-    // tenant's serial log.
-let t = t;
-    let text = if app.store.get_for_tenant(&t.tenant_id, &id).ok().flatten().is_some() {
-        read_console(&app.data_dir, &id)
-    } else {
-        String::new()
-    };
+    // Cross-tenant ids get the empty tail (the adapter's rule — never
+    // another tenant's serial log).
+    let text = app
+        .api
+        .get_console(&CallCtx::read(&t.tenant_id), &id)
+        .unwrap_or_default();
     let mut lines: Vec<String> = text.lines().rev().take(40).map(String::from).collect();
     lines.reverse();
     ConsoleTail { lines }.render().unwrap().into()
@@ -784,24 +723,22 @@ async fn stop_workload(
     Extension(t): Extension<TenantCtx>,
 ) -> Response {
     let actor = actor_of(&headers);
-    // tenant gate BEFORE the stop: a cross-tenant stop must be a 404
-let t = t;
-    if app.store.get_for_tenant(&t.tenant_id, &id).ok().flatten().is_none() {
-        return not_found_page(&app, &format!("workload not found: {id}"), "/w").into_response();
-    }
-    let id2 = id.clone();
+    // StopWorkload through the seam; the tenant gate is the adapter's
+    // (cross-tenant stop = NotFound, never a wipe of another tenant's row)
     let app2 = app.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        let mut ex = app2.exec.lock().unwrap();
-        ops::stop(&app2.store, &mut *ex, &id2)
-    })
-    .await
-    .unwrap_or_else(|e| Err(ops::OpsError::InvalidSpec(format!("join: {e}"))));
+    let ctx = CallCtx::mutate(&t.tenant_id, &actor);
+    let id2 = id.clone();
+    let result = tokio::task::spawn_blocking(move || app2.api.stop_workload(&ctx, &id2))
+        .await
+        .unwrap_or_else(|e| Err(ApiError::Failed(format!("join: {e}"))));
 
     match result {
         Ok(()) => {
             audit(&app, &actor, "StopWorkload", &id, "ok");
             Redirect::to(&format!("/w/{id}")).into_response()
+        }
+        Err(ApiError::NotFound(e)) => {
+            not_found_page(&app, &e, "/w").into_response()
         }
         Err(e) => {
             audit(&app, &actor, "StopWorkload", &id, &format!("rejected: {e}"));
@@ -857,28 +794,24 @@ async fn delete_workload(
     Extension(t): Extension<TenantCtx>,
 ) -> Response {
     // DeleteWorkload is an operation (doc 09 conventions): teardown with the
-    // reported wipe — the report is the page.
+    // reported wipe — the report is the page. The tenant gate is the
+    // adapter's (cross-tenant delete = NotFound, never another tenant's wipe).
     let actor = actor_of(&headers);
-    // tenant gate BEFORE the wipe: a cross-tenant delete must be a 404, never
-    // a wipe of another tenant's workload
-let t = t;
-    if app.store.get_for_tenant(&t.tenant_id, &id).ok().flatten().is_none() {
-        return not_found_page(&app, &format!("workload not found: {id}"), "/w").into_response();
-    }
-    let id2 = id.clone();
     let app2 = app.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        let mut ex = app2.exec.lock().unwrap();
-        ops::wipe(&app2.store, &mut *ex, &id2, &porche_core::Markers::new())
-    })
-    .await
-    .unwrap_or_else(|e| Err(ops::OpsError::InvalidSpec(format!("join: {e}"))));
+    let ctx = CallCtx::mutate(&t.tenant_id, &actor);
+    let id2 = id.clone();
+    let result = tokio::task::spawn_blocking(move || app2.api.delete_workload(&ctx, &id2))
+        .await
+        .unwrap_or_else(|e| Err(ApiError::Failed(format!("join: {e}"))));
 
     match result {
         Ok(report) => {
             audit(&app, &actor, "DeleteWorkload", &id, "ok (wipe report rendered)");
             Html(wipe_report_page(&app.base_path, "DeleteWorkload", &id, &report, "/w", "workloads").render().unwrap())
                 .into_response()
+        }
+        Err(ApiError::NotFound(e)) => {
+            not_found_page(&app, &e, "/w").into_response()
         }
         Err(e) => {
             audit(&app, &actor, "DeleteWorkload", &id, &format!("rejected: {e}"));
@@ -898,11 +831,10 @@ struct VolumeRow {
     attached_label: String,
 }
 
-fn volume_rows(app: &AppState, tenant_id: &str) -> Vec<VolumeRow> {
-    let records = app.store.list_for_tenant(tenant_id).unwrap_or_default();
+fn volume_rows(app: &AppState, ctx: &CallCtx) -> Vec<VolumeRow> {
+    let records = app.api.list_volumes(ctx).unwrap_or_default();
     let mut rows: Vec<VolumeRow> = records
         .iter()
-        .filter(|r| r.spec.volume.is_some())
         .map(|r| {
             let console = read_console(&app.data_dir, &r.spec.id);
             let d = derive_state(
@@ -936,10 +868,9 @@ async fn volumes(
     State(app): State<Arc<AppState>>,
     Extension(t): Extension<TenantCtx>,
 ) -> Html<String> {
-let t = t;
     VolumesPage {
         version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
-        rows: volume_rows(&app, &t.tenant_id),
+        rows: volume_rows(&app, &CallCtx::read(&t.tenant_id)),
     }
     .render()
     .unwrap()
@@ -956,11 +887,14 @@ struct ImagesPage {
 
 /// `/w/images` — the user-surface image listing (E-30 follow-up: the create
 /// form's select shows a short id; this page carries the full digests).
-async fn images(State(app): State<Arc<AppState>>) -> Html<String> {
+async fn images(
+    State(app): State<Arc<AppState>>,
+    Extension(t): Extension<TenantCtx>,
+) -> Html<String> {
     ImagesPage {
         version: env!("CARGO_PKG_VERSION"),
         base: app.base_path.clone(),
-        images: image_options(&app, ""),
+        images: image_options(&app, &CallCtx::read(&t.tenant_id), ""),
     }
     .render()
     .unwrap()
@@ -982,9 +916,9 @@ async fn volume_detail(
     Path(id): Path<String>,
     Extension(t): Extension<TenantCtx>,
 ) -> Response {
-let t = t;
-    let row = volume_rows(&app, &t.tenant_id).into_iter().find(|v| v.id == id);
-    let rec = app.store.get_for_tenant(&t.tenant_id, &id).ok().flatten();
+    let ctx = CallCtx::read(&t.tenant_id);
+    let row = volume_rows(&app, &ctx).into_iter().find(|v| v.id == id);
+    let rec = app.api.get_workload(&ctx, &id).unwrap_or_default();
     match (row, rec) {
         (Some(row), Some(r)) => Html(VolumeDetailPage {
             version: env!("CARGO_PKG_VERSION"), base: app.base_path.clone(),
@@ -1009,26 +943,15 @@ async fn delete_volume(
     // DeleteVolume goes through the workload's wipe path (the volume file, its
     // mapper and its DEK die together — never the volume alone) and renders the
     // same wipe report. Volumes have no separate CRUD in MS-1 (doc 09 §1 bet:
-    // the attach+wipe path).
+    // the attach+wipe path). The tenant gate is the adapter's (cross-tenant
+    // delete = NotFound, never another tenant's wipe).
     let actor = actor_of(&headers);
-    // tenant gate BEFORE the wipe: a cross-tenant delete must be a 404, never
-    // a wipe of another tenant's volume
-let t = t;
-    match app.store.get_for_tenant(&t.tenant_id, &id) {
-        Ok(Some(_)) => {}
-        _ => {
-            return not_found_page(&app, &format!("volume not found: {id}"), "/w/volumes")
-                .into_response()
-        }
-    }
-    let id2 = id.clone();
     let app2 = app.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        let mut ex = app2.exec.lock().unwrap();
-        ops::wipe(&app2.store, &mut *ex, &id2, &porche_core::Markers::new())
-    })
-    .await
-    .unwrap_or_else(|e| Err(ops::OpsError::InvalidSpec(format!("join: {e}"))));
+    let ctx = CallCtx::mutate(&t.tenant_id, &actor);
+    let id2 = id.clone();
+    let result = tokio::task::spawn_blocking(move || app2.api.delete_volume(&ctx, &id2))
+        .await
+        .unwrap_or_else(|e| Err(ApiError::Failed(format!("join: {e}"))));
 
     match result {
         Ok(report) => {
@@ -1039,6 +962,10 @@ let t = t;
                     .unwrap(),
             )
             .into_response()
+        }
+        Err(ApiError::NotFound(_)) => {
+            not_found_page(&app, &format!("volume not found: {id}"), "/w/volumes")
+                .into_response()
         }
         Err(e) => {
             audit(&app, &actor, "DeleteVolume", &id, &format!("rejected: {e}"));
@@ -1184,7 +1111,7 @@ async fn fleet(State(app): State<Arc<AppState>>) -> Html<String> {
         })
         .collect();
     let (wipes_total, wipes_failed) = wipe_aggregate(&app);
-    let mut images: Vec<String> = image_options(&app, "")
+    let mut images: Vec<String> = image_options(&app, &CallCtx::read("admin"), "")
         .into_iter()
         .map(|i| i.name)
         .collect();
@@ -1337,12 +1264,24 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("porche-web-test-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
+        let store = std::sync::Arc::new(porche_core::SqliteStore::open(dir.join("store.sqlite3")).unwrap());
+        let exec = std::sync::Arc::new(std::sync::Mutex::new(DirectExecutor::new(
+            Runner::Shell, &dir, dir.join("keys.json"),
+        )));
+        let audit = std::sync::Arc::new(std::sync::Mutex::new(AuditLog::open(dir.join("audit.jsonl"))));
         Arc::new(AppState {
+            api: crate::adapter_poc::PocConsole::new(
+                std::sync::Arc::clone(&store),
+                std::sync::Arc::clone(&exec),
+                dir.clone(),
+                tenants.clone(),
+                std::sync::Arc::clone(&audit),
+            ),
             tenants,
-            store: porche_core::SqliteStore::open(dir.join("store.sqlite3")).unwrap(),
-            exec: std::sync::Mutex::new(DirectExecutor::new(Runner::Shell, &dir, dir.join("keys.json"))),
+            store,
+            exec,
             data_dir: dir.clone(),
-            audit: std::sync::Mutex::new(AuditLog::open(dir.join("audit.jsonl"))),
+            audit,
             user_token,
             admin_token,
             clh: crate::ClhPin { version: "test".into() },
