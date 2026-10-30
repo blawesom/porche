@@ -15,7 +15,10 @@ use axum::middleware::Next;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::Router;
-use porche_core::{ops, DesiredStateStore, Record, VolumeSpec, WorkloadSpec, WorkloadState};
+use porche_core::{
+    ops, AdmitOutcome, DesiredStateStore, QuotaLimits, Record, VolumeSpec, WorkloadSpec,
+    WorkloadState,
+};
 use std::sync::Arc;
 
 pub fn router(state: Arc<AppState>) -> Router {
@@ -521,41 +524,6 @@ struct CreateForm {
 /// the rejection reason, or None when within quota. A tenant not in the
 /// map (legacy t0 with no entry) has no quota — PoC default-open for the
 /// operator's own scope only.
-fn quota_check(app: &AppState, tenant_id: &str, spec: &WorkloadSpec) -> Option<String> {
-    let Some((_, entry)) = app.tenants.iter().find(|(tid, _)| tid == tenant_id) else {
-        return None;
-    };
-    let q = &entry.quota;
-    let rows = app.store.list_for_tenant(tenant_id).unwrap_or_default();
-    let count = rows.len() as u32;
-    if count + 1 > q.workloads {
-        return Some(format!(
-            "quota: tenant {tenant_id} workload count {} would exceed {}",
-            count + 1,
-            q.workloads
-        ));
-    }
-    let cpu: u32 = rows.iter().map(|r| r.spec.vcpu).sum();
-    if cpu + spec.vcpu > q.vcpu {
-        return Some(format!(
-            "quota: tenant {tenant_id} vcpu {}+{} would exceed {}",
-            cpu,
-            spec.vcpu,
-            q.vcpu
-        ));
-    }
-    let ram: u32 = rows.iter().map(|r| r.spec.ram_mib).sum();
-    if ram + spec.ram_mib > q.ram_mib {
-        return Some(format!(
-            "quota: tenant {tenant_id} ram {}+{} MiB would exceed {} MiB",
-            ram,
-            spec.ram_mib,
-            q.ram_mib
-        ));
-    }
-    None
-}
-
 async fn create_submit(
     State(app): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -575,24 +543,19 @@ let t = t;
         gw6: form.gw6.clone(),
     };
 
-    // reject duplicate ids up front — the store's upsert would replace a row
-    // (duplicate check is tenant-global: workload ids are host-global device
-    // names — two tenants cannot both claim netns w-foo)
-    let pre = match app.store.get(form.id.trim()) {
-        Ok(Some(_)) => Some(format!("workload {:?} already exists", form.id.trim())),
-        Ok(None) => None,
-        Err(e) => Some(format!("store: {e}")),
-    };
-
-    let spec = pre.map(Err).unwrap_or_else(|| build_spec(&form, &t.tenant_id));
+    // The doc-15 create-path race closed (2026-10-30): duplicate-id and
+    // MS-2.M3 quota (FR-5 skeleton) checks and the row insert are ONE atomic
+    // store admission — two concurrent creates can never both pass (the old
+    // check-then-act read the store outside the insert's critical section).
+    // The id check is tenant-global: workload ids are host-global device
+    // names — two tenants cannot both claim netns w-foo.
+    let spec = build_spec(&form, &t.tenant_id);
     match spec {
         Ok(spec) => {
-            // validate BEFORE the synchronous pre-persist: an invalid spec must
-            // re-render the form with the reason (like the duplicate-id check),
-            // never leave a row stuck in `Creating` awaiting a task that will
-            // fail at `ops::create`'s own validate() gate (observed via the UAT
-            // smoke's over-long id, 2026-10-20).
-
+            // validate BEFORE admission: an invalid spec must re-render the
+            // form with the reason, never leave a row stuck in `Creating`
+            // awaiting a task that will fail at `ops::create`'s own validate()
+            // gate (observed via the UAT smoke's over-long id, 2026-10-20).
             if let Err(e) = spec.validate() {
                 audit(&app, &actor, "CreateWorkload", &form.id, &format!("rejected: {e}"));
                 return Html(WorkloadFormPage {
@@ -606,32 +569,34 @@ let t = t;
                 .unwrap())
                 .into_response();
             }
-            // MS-2.M3 quota gate (FR-5 skeleton): vCPU/RAM/count per tenant,
-            // enforced BEFORE the pre-persist — an over-quota create re-renders
-            // the form with the reason, never a row in the store.
-            if let Some(qerr) = quota_check(&app, &t.tenant_id, &spec) {
-                audit(&app, &actor, "CreateWorkload", &form.id, &format!("rejected: {qerr}"));
-                return Html(WorkloadFormPage {
-                    version: env!("CARGO_PKG_VERSION"),
-                    base: app.base_path.clone(),
-                    error: Some(qerr),
-                    form: vals,
-                    images: image_options(&app, &form.image_digest),
-                }
-                .render()
-                .unwrap())
-                .into_response();
-            }
+            // quota resolution stays with the tenant config (E-31.3); the
+            // enforcement moved INTO the store admission (a tenant absent
+            // from the config is unquota'd — the operator path)
+            let quota = app
+                .tenants
+                .iter()
+                .find(|(tid, _)| *tid == t.tenant_id)
+                .map(|(_, e)| QuotaLimits {
+                    vcpu: e.quota.vcpu,
+                    ram_mib: e.quota.ram_mib,
+                    workloads: e.quota.workloads,
+                });
             // MS-1 u03: the row must be observably `pending` (workspace state
             // Creating) before convergence runs — CreateWorkload returns
             // immediately; the real executor converges in the background and
             // the detail page's poll observes pending → running → done (rc=N).
-            use porche_core::DesiredStateStore;
-            if let Err(e) = app
+            let rejected = match app
                 .store
-                .upsert(&spec, &porche_core::WorkloadState::Creating)
-                .map_err(|e| format!("store: {e}"))
+                .admit_create(&spec, &WorkloadState::Creating, quota.as_ref())
             {
+                Ok(AdmitOutcome::Admitted) => None,
+                Ok(AdmitOutcome::DuplicateId) => {
+                    Some(format!("workload {:?} already exists", form.id.trim()))
+                }
+                Ok(AdmitOutcome::OverQuota(reason)) => Some(reason),
+                Err(e) => Some(format!("store: {e}")),
+            };
+            if let Some(e) = rejected {
                 audit(&app, &actor, "CreateWorkload", &form.id, &format!("rejected: {e}"));
                 return Html(WorkloadFormPage {
                     version: env!("CARGO_PKG_VERSION"),

@@ -27,6 +27,31 @@ pub struct Record {
     pub updated_at: i64,
 }
 
+/// Admission quota for one tenant (FR-5 skeleton, MS-2.M3): vCPU/RAM/count
+/// ceilings. Enforced **atomically with the row insert** — the create path's
+/// check-then-act window is closed here, not in the caller (doc 15, 2026-10-23
+/// code finding: duplicate + quota checks outside the store lock raced).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QuotaLimits {
+    pub workloads: u32,
+    pub vcpu: u32,
+    pub ram_mib: u32,
+}
+
+/// The outcome of a [`DesiredStateStore::admit_create`] attempt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AdmitOutcome {
+    /// Row inserted with the given state.
+    Admitted,
+    /// A row with this id exists (tenant-global: ids are host-global device
+    /// names — two tenants cannot both claim netns w-foo). The existing row
+    /// is untouched — admission never replaces.
+    DuplicateId,
+    /// The tenant's quota would be exceeded; the reason names the ceiling
+    /// (same wording as the MS-2.M3 web gate).
+    OverQuota(String),
+}
+
 /// The desired-state table. Everything the verbs do is a transition on this table
 /// plus convergence through the [`crate::Executor`] — the shape P0 keeps.
 pub trait DesiredStateStore: Send {
@@ -35,6 +60,19 @@ pub trait DesiredStateStore: Send {
     fn list(&self) -> Result<Vec<Record>, StoreError>;
     fn set_state(&self, id: &str, state: &WorkloadState) -> Result<(), StoreError>;
     fn delete(&self, id: &str) -> Result<(), StoreError>;
+
+    /// Atomic create admission: insert `spec`/`state` only if the id is
+    /// absent and the tenant is within `quota` (None = unquota'd tenant —
+    /// the operator/CLI path). Duplicate check, quota accounting and the
+    /// insert share **one critical section**, so two concurrent creates can
+    /// never both pass. A cross-process writer racing us fails the INSERT's
+    /// primary-key constraint — an honest rejection, never a silent replace.
+    fn admit_create(
+        &self,
+        spec: &WorkloadSpec,
+        state: &WorkloadState,
+        quota: Option<&QuotaLimits>,
+    ) -> Result<AdmitOutcome, StoreError>;
 
     // --- MS-2 tenancy scoping (E-31.2) -----------------------------------
     /// Tenant-filtered list — the user surface's only view (view isolation:
@@ -185,6 +223,76 @@ impl DesiredStateStore for SqliteStore {
         }
         Ok(())
     }
+
+    fn admit_create(
+        &self,
+        spec: &WorkloadSpec,
+        state: &WorkloadState,
+        quota: Option<&QuotaLimits>,
+    ) -> Result<AdmitOutcome, StoreError> {
+        let spec_json = serde_json::to_string(spec)?;
+        let state_json = serde_json::to_string(state)?;
+        // one critical section: duplicate check → quota accounting → insert
+        let conn = self.conn.lock().unwrap();
+
+        // duplicate first (tenant-global: ids are host-global device names)
+        let exists: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM workloads WHERE id = ?1);",
+                params![spec.id],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if exists {
+            return Ok(AdmitOutcome::DuplicateId);
+        }
+
+        if let Some(q) = quota {
+            // tenant usage inside the same critical section — same accounting
+            // as the MS-2.M3 web gate: every row of the tenant, any state
+            let mut stmt =
+                conn.prepare("SELECT spec_json, state_json, created_at, updated_at FROM workloads;")?;
+            let rows = stmt.query_map([], Self::row_to_record)?;
+            let mut count: u32 = 0;
+            let mut cpu: u32 = 0;
+            let mut ram: u32 = 0;
+            for row in rows {
+                let r = row?;
+                if r.spec.tenant_id == spec.tenant_id {
+                    count += 1;
+                    cpu += r.spec.vcpu;
+                    ram += r.spec.ram_mib;
+                }
+            }
+            if count + 1 > q.workloads {
+                return Ok(AdmitOutcome::OverQuota(format!(
+                    "quota: tenant {} workload count {} would exceed {}",
+                    spec.tenant_id,
+                    count + 1,
+                    q.workloads
+                )));
+            }
+            if cpu + spec.vcpu > q.vcpu {
+                return Ok(AdmitOutcome::OverQuota(format!(
+                    "quota: tenant {} vcpu {}+{} would exceed {}",
+                    spec.tenant_id, cpu, spec.vcpu, q.vcpu
+                )));
+            }
+            if ram + spec.ram_mib > q.ram_mib {
+                return Ok(AdmitOutcome::OverQuota(format!(
+                    "quota: tenant {} ram {}+{} MiB would exceed {} MiB",
+                    spec.tenant_id, ram, spec.ram_mib, q.ram_mib
+                )));
+            }
+        }
+
+        conn.execute(
+            "INSERT INTO workloads (id, spec_json, state_json, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?4);",
+            params![spec.id, spec_json, state_json, now()],
+        )?;
+        Ok(AdmitOutcome::Admitted)
+    }
 }
 
 #[cfg(test)]
@@ -309,6 +417,164 @@ mod tests {
         store.upsert(&spec("w1"), &WorkloadState::Running).unwrap();
         store.delete("w1").unwrap();
         assert!(store.get("w1").unwrap().is_none());
+    }
+
+    // --- admit_create: atomic admission (doc 15 create-path race, closed) ---
+
+    #[test]
+    fn admit_create_inserts_when_absent() {
+        let store = SqliteStore::in_memory().unwrap();
+        let out = store
+            .admit_create(&spec("w1"), &WorkloadState::Creating, None)
+            .unwrap();
+        assert_eq!(out, AdmitOutcome::Admitted);
+        let rec = store.get("w1").unwrap().unwrap();
+        assert_eq!(rec.state, WorkloadState::Creating);
+    }
+
+    #[test]
+    fn admit_create_duplicate_preserves_the_existing_row() {
+        let store = SqliteStore::in_memory().unwrap();
+        store
+            .admit_create(&spec("w1"), &WorkloadState::Creating, None)
+            .unwrap();
+        // a second, DIFFERENT spec with the same id must not replace the row
+        // (the old pre-admission upsert did — the bug the check raced around)
+        let mut challenger = spec("w1");
+        challenger.image_digest = format!("sha256:{}", "a".repeat(64));
+        let out = store
+            .admit_create(&challenger, &WorkloadState::Creating, None)
+            .unwrap();
+        assert_eq!(out, AdmitOutcome::DuplicateId);
+        let rec = store.get("w1").unwrap().unwrap();
+        assert_eq!(
+            rec.spec.image_digest,
+            format!("sha256:{}", "b".repeat(64)),
+            "the existing row is untouched"
+        );
+    }
+
+    #[test]
+    fn admit_create_enforces_count_vcpu_and_ram_ceilings() {
+        let store = SqliteStore::in_memory().unwrap();
+        let q = QuotaLimits {
+            workloads: 1,
+            vcpu: 2,
+            ram_mib: 128,
+        };
+        assert_eq!(
+            store
+                .admit_create(&spec("w1"), &WorkloadState::Creating, Some(&q))
+                .unwrap(),
+            AdmitOutcome::Admitted
+        );
+        // count ceiling (different id, same tenant)
+        match store
+            .admit_create(&spec("w2"), &WorkloadState::Creating, Some(&q))
+            .unwrap()
+        {
+            AdmitOutcome::OverQuota(r) => assert!(r.contains("workload count"), "{r}"),
+            other => panic!("expected over-quota, got {other:?}"),
+        }
+        // vcpu ceiling (fresh store: one 1-vcpu row, quota 1)
+        let store = SqliteStore::in_memory().unwrap();
+        let q = QuotaLimits {
+            workloads: 10,
+            vcpu: 1,
+            ram_mib: 4096,
+        };
+        store
+            .admit_create(&spec("w1"), &WorkloadState::Creating, Some(&q))
+            .unwrap();
+        match store
+            .admit_create(&spec("w2"), &WorkloadState::Creating, Some(&q))
+            .unwrap()
+        {
+            AdmitOutcome::OverQuota(r) => assert!(r.contains("vcpu"), "{r}"),
+            other => panic!("expected over-quota, got {other:?}"),
+        }
+        // ram ceiling (fresh store: one 64-MiB row, quota 64)
+        let store = SqliteStore::in_memory().unwrap();
+        let q = QuotaLimits {
+            workloads: 10,
+            vcpu: 16,
+            ram_mib: 64,
+        };
+        store
+            .admit_create(&spec("w1"), &WorkloadState::Creating, Some(&q))
+            .unwrap();
+        match store
+            .admit_create(&spec("w2"), &WorkloadState::Creating, Some(&q))
+            .unwrap()
+        {
+            AdmitOutcome::OverQuota(r) => assert!(r.contains("ram"), "{r}"),
+            other => panic!("expected over-quota, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn admit_create_without_quota_admits_any_tenant() {
+        // None = unquota'd (operator/CLI path) — admission is id-only
+        let store = SqliteStore::in_memory().unwrap();
+        for i in 0..5 {
+            assert_eq!(
+                store
+                    .admit_create(&spec_tenant("t0", &format!("w{i}")), &WorkloadState::Creating, None)
+                    .unwrap(),
+                AdmitOutcome::Admitted
+            );
+        }
+    }
+
+    // THE race regression (doc 15, 2026-10-23): concurrent creates with the
+    // same id — exactly one admission wins, the rest see DuplicateId, and
+    // the store holds exactly one row.
+    #[test]
+    fn admit_create_same_id_concurrent_exactly_one_wins() {
+        let store = std::sync::Arc::new(SqliteStore::in_memory().unwrap());
+        let handles: Vec<_> = (0..8)
+            .map(|i| {
+                let s = std::sync::Arc::clone(&store);
+                std::thread::spawn(move || {
+                    let mut sp = spec(&format!("w{i}"));
+                    sp.id = "race".into();
+                    s.admit_create(&sp, &WorkloadState::Creating, None).unwrap()
+                })
+            })
+            .collect();
+        let mut admitted = 0;
+        let mut duplicates = 0;
+        for h in handles {
+            match h.join().unwrap() {
+                AdmitOutcome::Admitted => admitted += 1,
+                AdmitOutcome::DuplicateId => duplicates += 1,
+                AdmitOutcome::OverQuota(_) => panic!("no quota set — impossible"),
+            }
+        }
+        assert_eq!(admitted, 1, "exactly one create may win the id");
+        assert_eq!(duplicates, 7);
+        assert_eq!(store.list().unwrap().len(), 1);
+    }
+
+    // quota accounting is scoped per tenant — t1's usage never counts
+    // against t0's ceiling
+    #[test]
+    fn admit_create_quota_is_tenant_scoped() {
+        let store = SqliteStore::in_memory().unwrap();
+        let q = QuotaLimits {
+            workloads: 1,
+            vcpu: 1,
+            ram_mib: 64,
+        };
+        store
+            .admit_create(&spec_tenant("t0", "w1"), &WorkloadState::Creating, Some(&q))
+            .unwrap();
+        assert_eq!(
+            store
+                .admit_create(&spec_tenant("t1", "w2"), &WorkloadState::Creating, Some(&q))
+                .unwrap(),
+            AdmitOutcome::Admitted
+        );
     }
 
     #[test]

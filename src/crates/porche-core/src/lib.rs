@@ -12,4 +12,6 @@ pub mod store;
 pub use executor::{ExecuteError, Executor, Markers, WipeReport};
 pub use ops::OpsError;
 pub use spec::{VolumeSpec, WorkloadSpec, WorkloadState};
-pub use store::{DesiredStateStore, Record, SqliteStore, StoreError};
+pub use store::{
+    AdmitOutcome, DesiredStateStore, QuotaLimits, Record, SqliteStore, StoreError,
+};
