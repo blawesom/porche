@@ -1,0 +1,27 @@
+== upload bundle ==
+== 1. nested virt hardware ==
+vmx-flag: 16 cpus
+crw-rw----. 1 root kvm 10, 232 Nov 20 18:58 /dev/kvm
+nested: Y
+kernel: 6.18.58-flatcar
+== 2. CLH v54.0 guest boot smoke ==
+cloud-hypervisor v54.0
+cloud-hypervisor:   0.023642s: <vcpu0> WARN:vmm/src/cpu.rs:273 -- Kernel lacks CONFIG_SCHED_CORE support - no SMT isolation
+--- serial log (first 15 lines) ---
+[    0.000000] Linux version 6.18.57 (outscale@dev) (gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0, GNU ld (GNU Binutils for Ubuntu) 2.46) #1 SMP PREEMPT_DYNAMIC Tue Oct 20 10:39:10 UTC 2026
+[    0.000000] Command line: console=ttyS0
+[    0.000000] BIOS-provided physical RAM map:
+[    0.000000] BIOS-e820: [mem 0x0000000000000000-0x000000000009ffff] usable
+[    0.000000] BIOS-e820: [mem 0x0000000000100000-0x000000001fffffff] usable
+[    0.000000] BIOS-e820: [mem 0x00000000e8000000-0x00000000f7ffffff] reserved
+[    0.000000] BIOS-e820: [mem 0x000000fd00000000-0x000000ffffffffff] reserved
+[    0.000000] NX (Execute Disable) protection: active
+[    0.000000] APIC: Static calls initialized
+[    0.000000] SMBIOS 3.2.0 present.
+[    0.000000] DMI: Cloud Hypervisor cloud-hypervisor, BIOS 0 
+[    0.000000] DMI: Memory slots populated: 0/0
+[    0.000000] Hypervisor detected: KVM
+[    0.000000] last_pfn = 0x20000 max_arch_pfn = 0x400000000
+[    0.000000] kvm-clock: Using msrs 4b564d01 and 4b564d00
+--- verdict ---
+GUEST-BOOT-OK

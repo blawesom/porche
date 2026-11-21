@@ -1,0 +1,30 @@
+== PORCHE §7.1 fixture record (Flatcar node variant) ==
+captured: 2026-11-20T20:01:52Z  (host: ip-10-8-20-164.us-west-1.compute.internal)
+
+-- node OS + kernel --
+Flatcar Container Linux by Kinvolk 4881.0.0+nightly-20261111-2100
+uname -r: 6.18.58-flatcar
+
+-- CLH --
+version: cloud-hypervisor v54.0
+sha256: 4f4f98a3d661a40f3e5272627cc895a1b2e525f2f6bedf5f895f9cd21ba5c65b
+
+-- guest image (platform image dirs) --
+dir: /var/lib/porche/images/sha256:96291392360e3448e6bdf46ce9c702de3e889efad3272dbee4e4419aeb81652a/
+kernel 6.18.57 sha256:15033a952f6f990e1c4e418ae07dc65d656cb03aa3c52e0f29a78c4ad00b5311
+initramfs busybox-1.36.1 sha256:1d45a2a404ab807c7e661e98e25684f550528f102d1fd504b6e83e7339859b53
+platform_init sha256:328fd77cc09ea2257617c86f49082193c3d7033cad38bff973719f07b03d8124
+15033a952f6f990e1c4e418ae07dc65d656cb03aa3c52e0f29a78c4ad00b5311  /var/lib/porche/images/sha256:96291392360e3448e6bdf46ce9c702de3e889efad3272dbee4e4419aeb81652a//kernel
+1d45a2a404ab807c7e661e98e25684f550528f102d1fd504b6e83e7339859b53  /var/lib/porche/images/sha256:96291392360e3448e6bdf46ce9c702de3e889efad3272dbee4e4419aeb81652a//initramfs
+
+-- host-agent --
+commit: 52911db
+sha256: 0cdada9f4f0ce295c99c23531dca9c2b6ea3903fb123a4f4bb50e445680f6bd9
+porche-web sha256: 97bf5a4b502fa4eeeb8687de9b1f69be996e4452205a05a452609f16aa39677f
+
+-- hardening state (SEC-11 sysctls, §7.2) --
+kernel.io_uring_disabled = 2
+user.max_user_namespaces = 0
+kernel.core_pattern = core
+kernel.modules_disabled = 1
+sysctl-assert: PASS

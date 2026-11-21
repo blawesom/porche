@@ -1,0 +1,210 @@
+MS-5 re-entry attempt — dedicated host redeploy, 2026-11-19 (use2 / us-east-2)
+==========================================================================
+run-id: 20261119-redeploy (runs/20261119-redeploy/)
+note: the scripts in this dir were sanitized pre-commit (2026-11-21):
+the usw1 credentials they carried when run now live only in
+~/.osc/config.json (the repo rule); nothing else changed.
+operator: "try to redeploy on outscale region a dedicated host on any gen
+or AZ and P1 only. do a quick coverage test."
+context: 19 days after the MS-5 window (2026-10-30), which closed BLOCKED
+on dedicated placement — ~250 real CreateVms attempts, every valid
+gen × AZ × P1 combo returned 10001 InsufficientCapacity, while a
+default-tenancy probe created instantly (the DISCRIMINATOR). Primary
+hypothesis at close: zero/small dedicated-VM quota on the fresh use2
+tenant; quota-increase request was the unblock action.
+
+== pre-attempt state (verified live 2026-11-19 12:31 UTC) ==
+- use2 profile: only permitted profile (Makefile guard / BOUNDARIES).
+- Groups: all six MS-5 free groups still present —
+  porche-ms5 (ded-470f1199, g7, 2a), porche-ms5-b (ded-bc88ffa1, g7, 2b),
+  porche-ms5-g6 (ded-ff33bd58, g6, 2a), porche-ms5-g6b (ded-467a6840, g6,
+  2b), porche-ms5-g5 (ded-59d7fbe7, g5, 2a), porche-ms5-g5b (ded-22ca7d87,
+  g5, 2b).
+- OMIs (self): ami-c804ee38 porche-fcos-44.20260913.3.2 available (the
+  MS-5 pin). No PORCHE VMs present (only foreign i-0e17d9bb, untouched).
+- SG sg-0fca547a (porche-ms5-sg) present. Keypair: none PORCHE-owned in
+  use2 (key goes via Ignition UserData per doc 13 §4.12 — no keypair
+  needed). Guest bundle reproducible locally: guest/out manifest digest
+  96291392360e... matches the MS-5 pin (no rebuild needed).
+- No armed retry loop from MS-5 was still running (fresh shell).
+
+== attempt 1 — gen × AZ matrix, node shape, P1 only (sweep.sh) ==
+| # | VmType         | Group (gen, subregion) | Result   |
+|---|----------------|------------------------|----------|
+| t01 | tinav7.c8r16p1 | g7, us-east-2a | 10001 InsufficientCapacity |
+| t02 | tinav7.c8r16p1 | g7, us-east-2b | 10001 InsufficientCapacity |
+| t03 | tinav6.c8r16p1 | g6, us-east-2a | 10001 InsufficientCapacity |
+| t04 | tinav6.c8r16p1 | g6, us-east-2b | 10001 InsufficientCapacity |
+| t05 | tinav5.c8r16p1 | g5, us-east-2a | 10001 InsufficientCapacity |
+| t06 | tinav5.c8r16p1 | g5, us-east-2b | 10001 InsufficientCapacity |
+All: ami-c804ee38, NestedVirtualization=true, SG sg-0fca547a, Ignition
+UserData (core + porche_integ key), OMI 10 GiB root (no BSM override).
+12:33:08–12:33:12 UTC.
+
+== attempt 2 — size discriminator, P1 canary (disc.sh A) ==
+c2r2p1 dedicated in g7-2a / g7-2b / g6-2a / g5-2a — all 10001.
+Size is not the variable: the dedicated path rejects at every
+generation and AZ, shape-independent.
+
+== attempt 3 — region-capacity discriminator (disc.sh B, transient) ==
+P1, default tenancy (no group, no nested virt — dedicated-only flag):
+  b1 tinav7.c2r2p1 2a → CREATED i-12dff5fd (pending→deleted in seconds)
+  b2 tinav6.c4r8p1 2a → CREATED i-7b94f884 (pending→deleted in seconds)
+Same discriminator as MS-5 14:52 UTC, 19 days later: the region HAS P1
+capacity; the DEDICATED placement path is the block.
+
+== coverage (the "quick coverage test", as placed) ==
+Covered today (10 dedicated attempts, all P1):
+  gens 7/6/5 × AZ 2a/2b × {c8r16p1 (node shape), c2r2p1 (canary)}
+  + default-tenancy control × 2
+Not re-covered (already covered by the MS-5 grid, 2026-10-30):
+  c4r8/c4r16/c16r32 p1, p2 SKUs, plain "dedicated" tenancy, predefined
+  types (c7/c5/c7.2xlarge...), gen-4 groups, hpc7c — ~105 attempts,
+  same 10001.
+Nested-virt / CLH host coverage test: NOT RUNNABLE — no dedicated host
+to run it on (allocation never succeeded). The staged coverage of the
+host path itself is intact: OMI available, SG present, ignition
+payload DryRun-validated (octl --dry-run), guest/out artifacts
+bit-identical to the MS-5 pin. Everything still resumes with one
+CreateVms.
+
+== findings (mechanics, new) ==
+1. octl CreateVms BlockDeviceMappings WITHOUT DeviceName: the API
+   rejects with 4019 "The provided value ('{name}') for the parameter
+   'Device' is invalid" — a BSM override needs an explicit
+   --BlockDeviceMappings.0.DeviceName (or no BSM at all). MS-5's
+   DryRun-validated 50 GiB root payload must have carried one; DryRun
+   does NOT surface this (the 4019 comes from the real call).
+2. octl `--dry-run` (local) prints the exact request payload — use it
+   to settle flag/encoding questions before real calls (userdata file
+   is sent AS-IS: the --UserData file must already be base64).
+3. QUOTA CHECKED (ReadQuotas, 12:5x UTC) — corrects the MS-5
+   hypothesis. dedicated_server_limit: max=1, used=0 ("Maximum number
+   of dedicated servers"). The quota is NOT zero; nothing is in use,
+   so a SINGLE dedicated allocation fits within it. The 10x 10001 is
+   therefore NOT a quota rejection — it points to physical
+   dedicated-server STOCK in us-east-2 (or the dedicated fleet not
+   being served there), with default tenancy as the capacity control.
+   Consequences: (a) a single-node redeploy needs no quota change if
+   stock ever appears — the retry/CreateVms path is unblocked on the
+   entitlement side; (b) the full MS-5 2-node co-located pair still
+   needs dedicated_server_limit >= 2 → the quota request stands for
+   the pair; (c) the support ask should be reworded from "raise
+   quota" to "dedicated server availability in us-east-2" (cc
+   TAM/sales-eu@outscale.com).
+
+== state at file close ==
+- No PORCHE VMs left: both probes TERMINATED (confirmed 12:44 UTC);
+  their 10 GiB OMI root volumes (vol-4e3db10e / vol-05adf19f)
+  auto-deleted (DeleteOnVmDeletion); volumes/EIPs/SGs inventory back
+  to the pre-run baseline (4 foreign volumes, 3 EIPs, 4 SGs).
+- All six free groups, SG, OMI, ignition payload (userdata.b64),
+  sweep scripts retained in this run dir.
+- Blocker unchanged: dedicated placement 10001 = quota, not capacity.
+- Suggested: (a) chase the quota request / confirm with Outscale TAM;
+  (b) if it stalls, the operator fallback from MS-5's closing note
+  stands (old sandbox tenant demonstrably held dedicated capacity —
+  but that is OUT OF BOUNDS for this config without an explicit
+  boundary change, BOUNDARIES.md hard rules).
+- No retry loop re-armed (19 days of looping produced nothing; a
+  lightweight loop can be re-armed if desired).
+
+== addendum 15:30–15:40 UTC — us-west-1 probe (operator: usw1 in scope,
+euw2 still out) ==
+Profile scope recorded in infra/integration/BOUNDARIES.md + README +
+doc 13 §4.10 (usw1 IN, euw2 OUT; same account 249064296596).
+us-west-1 subregions: us-west-1a, us-west-1b. Quota:
+dedicated_server_limit = 0 (vs 1 in use2).
+Staged group: porche-usw1-g7 (ded-17bf03d6, g7, 1a) — kept for retries.
+Note: OMIs are region-scoped — ami-c804ee38 does NOT exist in usw1
+(5023); the pinned FCOS OMI would need import (OOS multipart, the
+2026-10-23 recipe) before a real node can boot there.
+Probe results (real calls):
+| call | result |
+|---|---|
+| tinav7.c8r16p1 + NV @ ded-17bf03d6 (g7, 1a), Rocky OMI | 10001 InsufficientCapacity |
+| tinav7.c2r2p1 default tenancy @1a (transient) | CREATED i-bfa8d3bc — deleted (probe) |
+Verdict: us-west-1 has the SAME shape as us-east-2 — general P1
+capacity is instant, the dedicated path 10001s; on top of that the
+dedicated quota is 0 there (use2 at least has 1). us-west-1 is not an
+alternate route for the dedicated host; it needs a quota grant first
+(and the FCOS OMI import) before it can even be tried for real.
+
+== addendum 2026-11-19 16:0x UTC — gen-6 matrix, both AZs (operator request) ==
+| call | group | result |
+|---|---|---|
+| tinav6.c8r16p1 + NV @ us-west-1a | porche-usw1-g6-1a (ded-8428ed0b) | 10001 |
+| tinav6.c8r16p1 + NV @ us-west-1b | porche-usw1-g6-1b (ded-4cba0d76) | 10001 |
+Same verdict as gen-7: the dedicated path 10001s in us-west-1
+regardless of generation. Staged groups now in usw1: g7-1a
+(ded-17bf03d6), g6-1a (ded-8428ed0b), g6-1b (ded-4cba0d76) — kept
+for retries. Transient probe i-bfa8d3bc terminated (root volume
+auto-deletes).
+
+== addendum 2026-11-20 — QUOTA GRANT LANDED IN usw1; STOCK STILL EMPTY ==
+ReadQuotas: usw1 dedicated_server_limit 0 -> 10 (use2 unchanged, 1).
+Post-grant placement matrix (all real CreateVms, Rocky public OMI
+ami-4a4837a3 — the FCOS OMI still does not exist in usw1):
+| # | VmType | Group (gen, subregion) | Result |
+|---|---|---|---|
+| 1 | tinav7.c8r16p1 | g7, us-west-1a | 10001 |
+| 2 | tinav6.c8r16p1 | g6, us-west-1a | 10001 |
+| 3 | tinav6.c8r16p1 | g6, us-west-1b | 10001 |
+| 4 | tinav7.c8r16p1 | g7, us-west-1b (new group porche-usw1-g7-1b, ded-31667ea0) | 10001 |
+| 5 | tinav7.c2r2p1 (canary) | g7, us-west-1a | 10001 |
+| 6 | tinav6.c2r2p1 (canary) | g6, us-west-1b | 10001 |
+Reading: with quota 10 the dedicated path STILL returns 10001 across
+both AZs, both generations, node and canary shapes — the blocker is
+now unambiguously STOCK, not entitlement, in BOTH regions (use2:
+quota 1, same 10001). The support ask narrows to dedicated-server
+availability alone. Staged groups in usw1: g7-1a, g6-1a, g6-1b,
+g7-1b.
+
+== recheck 2026-11-20 (later) ==
+Quotas unchanged (use2 0/1, usw1 0/10, none in use). Stock probes:
+tinav7.c8r16p1 @ g7-2a (use2) and @ g7-1a (usw1) — both still 10001.
+No change since the grant landed.
+
+== addendum 2026-11-20 15:48–15:55 UTC — FULL GRID (gen 4-7 x all AZ x
+p1/p2/p3, both regions) — DEDICATED STOCK FOUND AT gen5/us-west-1b ==
+Operator request: "recheck deployment on gen 4, 5, 6 and 7. all perf
+flag, all az". Grid script: grid-sweep.sh (first success wins; use2
+carried the real FCOS node payload, usw1 a Rocky probe payload).
+Groups staged first: gen-4 groups created in BOTH regions (valid:
+CpuGeneration 4 accepted; tinav4 types validate — they reach the
+capacity check, not 3002). One duplicate group (porche-usw1-g5-1a)
+created by a plumbing slip — deleted on discovery.
+
+Results (50 parsed cells + rule re-verification):
+| region | tenancy | flags | result |
+|---|---|---|---|
+| use2 | groups (g4-7, 2a/2b) | p1 | all 8 cells 10001 |
+| use2 | group g7-2a | p2 | 3002 InvalidParameter (rule re-verified) |
+| use2 | plain dedicated | p1/p2/p3 x g4-7 x both AZ | all 24 cells 10001 |
+| usw1 | groups (g4-7, 1a/1b) | p1 | 10001 everywhere EXCEPT: |
+| usw1 | group g5-1b (ded-d326ad5a) | p1 | **SUCCESS — tinav5.c8r16p1** |
+| usw1 | plain dedicated | — | not reached (first success stopped the sweep) |
+
+THE BREAKTHROUGH: i-bfd154f5 created 15:50:05 UTC (gen-5 Skylake,
+tinav5.c8r16p1, NV=true, group tenancy) — the FIRST successful
+dedicated placement of the whole 2026-11-19/20 effort (~120 real
+attempts total). Dedicated stock EXISTS in us-west-1, gen-5,
+us-west-1b only (g5-1a, g4/g6/g7 both AZs: 10001; use2: everything
+10001).
+
+BUG + near-miss (recorded honestly): the first grid run (15:48) had a
+JSON-extraction bug that masked successes as "? ? FAIL" — its g5-1b
+cell actually CREATED i-782e78f8 (15:48:42) which ran unnoticed ~4 min
+until the inventory check. Both VMs deleted (probe semantics — Rocky
+image, not the FCOS node); teardown verified: terminated, root
+volumes auto-deleted, dedicated quota back to used=0 (max=10). Note:
+both sweep runs succeeded on the SAME cell — the first VM was still
+running when the second allocated, so the g5-1b group hosted 2 VMs
+concurrently (same physical server or not: unverified, irrelevant
+for the single-node deploy).
+
+NEXT (awaiting operator go): the real node deploy on g5-1b needs (1)
+the FCOS OMI imported into usw1 — infra/images/build-fcos-omi.sh is
+staged and validated (DRYRUN) for exactly this; (2) a usw1 SG
+(SSH/ICMP from the office egress) — none exists there yet; then one
+CreateVms (FCOS + Ignition + NV + group ded-d326ad5a) is the node.

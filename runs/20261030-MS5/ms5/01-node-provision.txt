@@ -1,0 +1,164 @@
+MS-5 node provision — use2, 2026-10-30 (capacity ladder + drift findings)
+==========================================================================
+run-id: 20261030-MS5 (runs/20261030-MS5/ms5/)
+context: MS-5 burst window opened with everything staged (below); the window
+is BLOCKED on metal capacity in us-east-2 — full ladder tried, retry loop
+armed (this file records the ladder per E-31.1: substitutions and blockers
+are recorded, not improvised silently).
+
+== staged state (all verified before the first capacity attempt) ==
+- FCOS OMI: ami-c804ee38 (porche-fcos-44.20260913.3.2, available, 10 GiB root,
+  created 2026-10-23) — the same pinned build as MS-5.M1 and the use2 rebuild
+- SG: sg-0fca547a (porche-ms5-sg) — inbound tcp/22 + icmp from 171.33.93.229/32
+  (office egress re-verified live 2026-10-30, unchanged since 2026-10-19)
+- Ignition user-data (base64, /tmp/opencode/ms5-userdata.b64): user core + the
+  porche_integ key (the §4.12 rule — key via UserData, not keypair injection;
+  Ignition-via-UserData compatibility was proven in MS-5.M2)
+- node bundle /tmp/opencode/ms5-bundle/: CLH v54.0 static
+  (sha256 4f4f98a3…5c65b — matches the fcos-node-setup.sh pin, verified at
+  download), porche + porche-web (built 2026-10-30 from cdf11cf), guest image
+  bit-identical to the MS-1 pin: kernel 15033a95…, initramfs 1d45a2a4…,
+  platform image sha256:96291392360e3448e6bdf46ce9c702de3e889efad3272dbee4e4419aeb81652a
+  (= sha256(guest/out/manifest.txt), reproduced locally without rebuild)
+- CreateVms payload (root 50 GiB, DeleteOnVmDeletion): DryRun-validated
+
+== capacity ladder (all real CreateVms calls, 2026-10-30 ~13:0x UTC) ==
+| # | VmType          | Group (gen/subregion)        | Result                |
+|---|-----------------|------------------------------|-----------------------|
+| 1 | tinav7.c8r16p1  | porche-ms5 (7, 2a)           | 10001 InsufficientCapacity |
+| 2 | tinav7.c8r16p1  | porche-ms5-b (7, 2b)         | 10001 InsufficientCapacity |
+| 3 | tinav7.c16r32p1 | porche-ms5 (7, 2a)           | 10001 InsufficientCapacity |
+| 4 | tinav7.c4r16p1  | porche-ms5 (7, 2a)           | 10001 InsufficientCapacity |
+| 5 | tinav7.c2r2p1   | porche-ms5 (7, 2a)           | 10001 InsufficientCapacity |
+| 6 | tinav7.c16r32p1 | porche-ms5-b (7, 2b)         | 10001 InsufficientCapacity |
+| 7 | tinav6.c8r16p1  | porche-ms5-g6 (6, 2a)         | 10001 InsufficientCapacity |
+| 8 | tinav6.c16r32p1 | porche-ms5-g6 (6, 2a)         | 10001 InsufficientCapacity |
+| 9 | tinav6.c4r16p1  | porche-ms5-g6 (6, 2a)         | 10001 InsufficientCapacity |
+|10 | tinav6.c8r16p1  | porche-ms5-g6b (6, 2b)        | 10001 InsufficientCapacity |
+|11 | tinav6.c4r8p2 +NV | porche-ms5-g6 (6, 2a)      | 3002 InvalidParameter |
+|12 | nv2.4xlarge     | porche-ms5 (7, 2a)           | 3002 InvalidParameter |
+|13 | nv2.4xlarge / nv1.xlarge | gen-5 group (2a)     | 3002 InvalidParameter |
+|14 | nv2.4xlarge / nv1.xlarge | gen-4 group (2a)     | 3002 InvalidParameter |
+|15 | tinav7.c8r16p2 / tinav7.c4r16 | porche-ms5 (7, 2a) | 3002 InvalidParameter |
+
+Reading: every nested-virt-capable metal combo (gen-7 all shapes, both
+subregions; gen-6 c8r16/c16r32/c4r16, both subregions) returned
+InsufficientCapacity. The metal pool in us-east-2 is exhausted fleet-wide,
+not shape-specific. This mirrors the old region's §4.13 capacity behavior
+(the E-31.1 ladder exists because of it).
+
+== findings (mechanics, for doc 13 §4 next revision) ==
+1. ReadVmTypes in us-east-2 lists NO tinav types at all — metal types are
+   invisible to the listing API; validity is only knowable from a real
+   CreateVms (DryRun does NOT validate VmType — rows 12–15 pass DryRun and
+   fail for real).
+2. Dedicated-group CpuGeneration must match the VM family generation:
+   tinav6 in a gen-7 group → 3002; gen-6 groups accept tinav6.
+3. Nested virtualization on gen 6: c8r16p1/c16r32p1/c4r16p1 PASS parameter
+   validation (rows 7–10 reached capacity), but tinav6.c4r8p2 + NV → 3002 —
+   per-shape, not per-generation. doc 13 §4's "gen-7 node" note stays the
+   safe rule; gen-6 c8r16p1 is a proven-valid fallback shape if it ever has
+   capacity.
+4. nv1/nv2 are not placeable in ANY creatable dedicated group generation
+   (4/5/7 tried) — not a metal path for nested virt.
+5. octl CreateSecurityGroup rejects non-ASCII in Description (em-dash).
+
+== tenant drift (doc 13 §4.10 addendum is stale) ==
+The use2 inventory is NO LONGER empty (recorded 2026-10-30): a running
+foreign VM i-0e17d9bb (tinav6.c4r8p2, default tenancy, us-east-2a), 4
+volumes (vol-ca728343/vol-57314e86/vol-5c7d657f/vol-68da154c), SGs
+default/dev_bl/public, keypair dev_bl, 3 public IPs. None are PORCHE's and
+none were touched — the shared-account discipline of the old sandbox tenant
+now applies to use2 as well. Also: the account has NO Nets (Net-less mode,
+like the old tenant's node placement). doc 13 §4.10's "inventory comes back
+empty by design" was true on 2026-10-23 and is not true on 2026-10-30.
+
+== state at file close ==
+- groups kept for retries: porche-ms5 (ded-470f1199, g7 2a), porche-ms5-b
+  (ded-bc88ffa1, g7 2b), porche-ms5-g6 (ded-ff33bd58, g6 2a), porche-ms5-g6b
+  (ded-467a6840, g6 2b); gen-4/gen-5 probe groups deleted.
+- retry loop armed: every 180 s, tinav7.c8r16p1 @2a → @2b → tinav6.c8r16p1
+  @g6-2a, up to 40 rounds (~2 h); on success the VM id lands in
+  /tmp/opencode/ms5-vm-id.txt and the window proceeds (volume → IP → bundle
+  upload → fcos-node-setup.sh → suite).
+
+== addendum 14:20-14:25 UTC — operator-ordered full grid sweep (p1/p2 × v5/v6/v7) ==
+The first retry loop (10 rounds, all 10001) was stopped and the grid swept in
+full — shapes c2r2/c4r8/c4r16/c8r16/c16r32 × p1/p2 × gen 7/6/5 × tenancy
+(group 2a, group 2b, plain "dedicated"), real CreateVms calls, first success
+wins (log: /tmp/opencode/ms5-sweep.log; ~70 attempts). Result: NOTHING
+succeeded — every valid combination returned 10001 InsufficientCapacity;
+the exhaustion is fleet-wide (all generations, both subregions).
+
+Mechanics learned (type system, for doc 13 §4):
+- p2 SKUs exist (c8r16p2/c16r32p2/c4r16p2/c4r8p2/c2r2p2 all validate) but
+  are NOT placeable in dedicated groups (3002 in every group of every
+  generation): p2 = plain-dedicated (auto-placed) SKUs only. p2 + Tenancy
+  "dedicated" + NestedVirtualization=true is a VALID combination (reaches
+  the capacity check).
+- gen-5 metal exists in us-east-2: tinav5.*p1 validate in gen-5 groups
+  (created porche-ms5-g5 ded-59d7fbe7 @2a, porche-ms5-g5b ded-22ca7d87 @2b);
+  tinav5 p2 via plain dedicated validates too.
+- the foreign running VM's type (tinav6.c4r8p2, default tenancy) now reads:
+  a p2 SKU in shared/default placement — consistent with the p2 rule above.
+- Net effect on the option space: the valid-combo list grows from 3 to 10
+  (c8r16 p1 in g7/g6/g5 groups × 2 subregions + c8r16 p2 plain-dedicated ×
+  2 subregions) — all currently 10001.
+
+New retry loop armed (replaces the first): every 180 s, the full priority
+list — tinav7.c8r16p1 @g7-2a/2b, tinav7.c8r16p2 @dedicated 2a/2b,
+tinav6.c8r16p1 @g6-2a/2b, tinav5.c8r16p1 @g5-2a/2b, plus c4r16p1 fallbacks
+in g7 — up to 40 rounds. On success: VM id → /tmp/opencode/ms5-vm-id.txt,
+type → /tmp/opencode/ms5-vm-type.txt, and the window proceeds.
+
+== addendum 14:40-14:55 UTC — doc check + extended sweep + THE DISCRIMINATOR ==
+Outscale docs checked (About-Dedicated-Groups, VM-Types,
+Enabling-Nested-Virtualization, About-VMs):
+- pZ = performance flag: p1 highest / p2 high (default) / p3 medium.
+  Dedicated groups accept ONLY p1 (documented) — matches every observed
+  p2-in-group 3002. Plain Tenancy "dedicated" (no group) accepts p1 AND p2
+  and is the doc's own NV example path (tinav5.c16r32p2 +
+  NestedVirtualization=true + Tenancy "dedicated").
+- TINA types are fully customizable names (v2–v7, 1–78 vCPU, 1–1039 GiB,
+  p1–p3) — never listed by ReadVmTypes (only predefined types are listed).
+- CPU generations: v5 Skylake, v6 Ice Lake, v7 Sapphire Rapids.
+- **"Creating dedicated VMs requires more quotas than those allocated to
+  your OUTSCALE account by default"** (About-VMs; increase via support).
+
+Extended sweep (operator: "vm size is not important"), 35 more real calls:
+predefined c7.2xlarge/xlarge/large @g7 groups, c5.2xlarge/xlarge/large @g5
+groups, tiny TINA c1r1p1/c2r4p1 shapes, the doc's example tinav5.c16r32p2
+@plain-dedicated, m7/r7/c5 predefined @plain-dedicated, c1r1p2 tiny p2s,
+440fxlegacy1.large @g6, hpc7c.medium (@group INVALID, @dedicated NOCAP),
+t2.small @dedicated — **ALL 10001** (log: /tmp/opencode/ms5-sweep2.log).
+
+THE DISCRIMINATOR (14:52 UTC): a DEFAULT-tenancy probe (tinav6.c4r8p2,
+no nested virt, same payload otherwise) created INSTANTLY (i-fe58bee1,
+pending→running in seconds; deleted immediately after — probe lifetime
+< 2 min, root BSU DeleteOnVmDeletion).
+
+Conclusion (recorded as the window's primary blocker):
+- The region HAS capacity (default-tenancy creation succeeds instantly).
+- The DEDICATED placement path is what returns 10001 — across every type,
+  size, generation, subregion, and tenancy style (~105 attempts, 0 valid
+  combos succeeded).
+- Docs: dedicated VMs need above-default account quota. The use2 tenant is
+  fresh (2026-10-23) → **zero/small dedicated-VM quota is the primary
+  hypothesis**; InsufficientCapacity is its surface symptom.
+- Action for the operator: request the dedicated-VM quota increase for the
+  use2 account (support@outscale.com, cc TAM/sales-eu@outscale.com — the
+  doc's instruction). Until the quota is raised, dedicated retry loops are
+  expected to be futile; a light loop stays armed anyway (every 300 s,
+  6 best combos) to catch the surprise case.
+- Fallback (operator decision, contradicts the doc-13 §4.10 tenant switch):
+  the old sandbox tenant (eu-west-2) demonstrably held dedicated capacity
+  (nodes ran there until 2026-10-23) — MS-5 could run there if the quota
+  path stalls.
+
+== closing note 16:38 UTC ==
+The light loop exhausted its 24 rounds (144 attempts, all 10001 — ~250
+dedicated-placement attempts total today, zero successes, while the
+default-tenancy probe created instantly). The window stands blocked on the
+quota request; cloud state is clean (no PORCHE VMs, probe terminated, six
+free groups + SG + OMI + Ignition payload + node bundle all staged).
+Everything resumes with one CreateVms the moment dedicated placement works.

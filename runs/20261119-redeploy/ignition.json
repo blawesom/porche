@@ -1,0 +1,15 @@
+{
+  "ignition": {
+    "version": "3.4.0"
+  },
+  "passwd": {
+    "users": [
+      {
+        "name": "core",
+        "sshAuthorizedKeys": [
+          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIhpfKsNcrZEjaYKfD6mU6Y9FDYZAhba9AYJzCKGJ0de porche-integ-20261019"
+        ]
+      }
+    ]
+  }
+}

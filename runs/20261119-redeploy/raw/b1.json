@@ -1,0 +1,63 @@
+{
+  "ResponseContext": {
+    "RequestId": "0da5c4f9-c1c1-4719-bf59-20c4eaeb184a"
+  },
+  "Vms": [
+    {
+      "ActionsOnNextBoot": {},
+      "Architecture": "x86_64",
+      "BlockDeviceMappings": [
+        {
+          "Bsu": {
+            "DeleteOnVmDeletion": true,
+            "LinkDate": "2026-11-19T12:33:40.667Z",
+            "State": "attaching",
+            "VolumeId": "vol-4e3db10e"
+          },
+          "DeviceName": "/dev/sda1"
+        }
+      ],
+      "BootMode": "legacy",
+      "BsuOptimized": false,
+      "CreationDate": "2026-11-19T12:33:40.667Z",
+      "DeletionProtection": false,
+      "Hypervisor": "kvm",
+      "ImageId": "ami-c804ee38",
+      "LaunchNumber": 0,
+      "NestedVirtualization": false,
+      "Nics": null,
+      "OsFamily": "",
+      "Performance": "highest",
+      "Placement": {
+        "SubregionName": "us-east-2a",
+        "Tenancy": "default"
+      },
+      "PrivateDnsName": "ip-10-16-4-191.us-east-2.compute.internal",
+      "PrivateIp": "10.16.4.191",
+      "ProductCodes": [
+        "0001"
+      ],
+      "ReservationId": "r-18ea1c77",
+      "RootDeviceName": "/dev/sda1",
+      "RootDeviceType": "ebs",
+      "SecurityGroups": [
+        {
+          "SecurityGroupId": "sg-0fca547a",
+          "SecurityGroupName": "porche-ms5-sg"
+        }
+      ],
+      "ShutdownBehaviorConfiguration": {
+        "GuestAction": "stop",
+        "HostAction": "stop"
+      },
+      "State": "pending",
+      "StateReason": "",
+      "Tags": [],
+      "TpmEnabled": false,
+      "UserData": "ewogICJpZ25pdGlvbiI6IHsKICAgICJ2ZXJzaW9uIjogIjMuNC4wIgogIH0sCiAgInBhc3N3ZCI6IHsKICAgICJ1c2VycyI6IFsKICAgICAgewogICAgICAgICJuYW1lIjogImNvcmUiLAogICAgICAgICJzc2hBdXRob3JpemVkS2V5cyI6IFsKICAgICAgICAgICJzc2gtZWQyNTUxOSBBQUFBQzNOemFDMWxaREkxTlRFNUFBQUFJSWhwZktzTmNyWkVqYVlLZkQ2bVU2WTlGRFlaQWhiYTlBWUp6Q0tHSjBkZSBwb3JjaGUtaW50ZWctMjAyNjEwMTkiCiAgICAgICAgXQogICAgICB9CiAgICBdCiAgfQp9Cg==",
+      "VmId": "i-12dff5fd",
+      "VmInitiatedShutdownBehavior": "stop",
+      "VmType": "tinav7.c2r2p1"
+    }
+  ]
+}

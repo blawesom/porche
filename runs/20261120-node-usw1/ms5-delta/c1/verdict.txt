@@ -1,0 +1,5 @@
+== hardened (offloads off) ==
+== baseline (offloads on) ==
+hardened: stress_completed=yes kernel_panic=no network_up=no wipe_ok=yes
+baseline: stress_completed=yes kernel_panic=no network_up=no wipe_ok=yes
+DELTA: none — same outcome both sides (version floor only, SEC-31 note)

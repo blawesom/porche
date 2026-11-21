@@ -1,0 +1,13 @@
+The server returned an error
+{
+  "Errors": [
+    {
+      "Code": "10001",
+      "Details": "",
+      "Type": "InsufficientCapacity"
+    }
+  ],
+  "ResponseContext": {
+    "RequestId": "4e45ad2b-ec10-4d60-957b-170f220f9950"
+  }
+}

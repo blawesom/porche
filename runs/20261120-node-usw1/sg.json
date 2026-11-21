@@ -1,0 +1,3 @@
+{"SecurityGroupId": "sg-6e78844f", "SecurityGroupName": "porche-usw1-sg",
+ "InboundRules": [{"IpProtocol": "icmp", "FromPortRange": -1, "ToPortRange": -1, "IpRanges": ["171.33.93.229/32"]},
+                  {"IpProtocol": "tcp", "FromPortRange": 22, "ToPortRange": 22, "IpRanges": ["171.33.93.229/32"]}]}

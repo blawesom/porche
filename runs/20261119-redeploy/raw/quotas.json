@@ -1,0 +1,496 @@
+{
+  "QuotaTypes": [
+    {
+      "QuotaType": "global",
+      "Quotas": [
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of VM this user can own",
+          "MaxValue": 20,
+          "Name": "vm_limit",
+          "QuotaCollection": "Compute",
+          "ShortDescription": "VM Limit",
+          "UsedValue": 1
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of total cores (virtual core)",
+          "MaxValue": 800,
+          "Name": "core_limit",
+          "QuotaCollection": "Compute",
+          "ShortDescription": "Core Limit",
+          "UsedValue": 4
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of total memory (GiB)",
+          "MaxValue": 4880,
+          "Name": "memory_limit",
+          "QuotaCollection": "Compute",
+          "ShortDescription": "Memory Limit",
+          "UsedValue": 8
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum IP addresses the user can allocate",
+          "MaxValue": 20,
+          "Name": "ip_limit",
+          "QuotaCollection": "Compute",
+          "ShortDescription": "IP Limit",
+          "UsedValue": 3
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of GPU the user can allocate",
+          "MaxValue": 0,
+          "Name": "gpu_limit",
+          "QuotaCollection": "Compute",
+          "ShortDescription": "GPU Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of dedicated servers",
+          "MaxValue": 1,
+          "Name": "dedicated_server_limit",
+          "QuotaCollection": "Compute",
+          "ShortDescription": "Dedicated Server Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of BSU volumes",
+          "MaxValue": 100,
+          "Name": "volume_limit",
+          "QuotaCollection": "Storage",
+          "ShortDescription": "Volume Limit",
+          "UsedValue": 4
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum cumulated size of BSU volumes (GiB)",
+          "MaxValue": 20480,
+          "Name": "volume_size_limit",
+          "QuotaCollection": "Storage",
+          "ShortDescription": "Volume Size Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum cumulated size of IO1 volumes (GiB)",
+          "MaxValue": 20480,
+          "Name": "io1_volume_size_limit",
+          "QuotaCollection": "Storage",
+          "ShortDescription": "IO1 Volume Size Limit",
+          "UsedValue": 100
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum cumulated size of OS1 volumes (GiB)",
+          "MaxValue": 20480,
+          "Name": "os1_volume_size_limit",
+          "QuotaCollection": "Storage",
+          "ShortDescription": "OS1 Volume Size Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum cumulated size of GP2 volumes (GiB)",
+          "MaxValue": 20480,
+          "Name": "gp2_volume_size_limit",
+          "QuotaCollection": "Storage",
+          "ShortDescription": "GP2 Volume Size Limit",
+          "UsedValue": 150
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum cumulated size of ST1 volumes (GiB)",
+          "MaxValue": 20480,
+          "Name": "st1_volume_size_limit",
+          "QuotaCollection": "Storage",
+          "ShortDescription": "ST1 Volume Size Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum cumulated size of SC1 volumes (GiB)",
+          "MaxValue": 20480,
+          "Name": "sc1_volume_size_limit",
+          "QuotaCollection": "Storage",
+          "ShortDescription": "SC1 Volume Size Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum cumulated size of standard volumes (GiB)",
+          "MaxValue": 20480,
+          "Name": "standard_volume_size_limit",
+          "QuotaCollection": "Storage",
+          "ShortDescription": "Standard Volume Size Limit",
+          "UsedValue": 108
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of snapshots",
+          "MaxValue": 10000,
+          "Name": "snapshot_limit",
+          "QuotaCollection": "Storage",
+          "ShortDescription": "Snapshot Limit",
+          "UsedValue": 6
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of active snapshots",
+          "MaxValue": 5,
+          "Name": "concurrent_snapshot_limit",
+          "QuotaCollection": "Storage",
+          "ShortDescription": "Concurrent Snapshot Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of running snapshot export tasks",
+          "MaxValue": 5,
+          "Name": "snapshot_export_limit",
+          "QuotaCollection": "Storage",
+          "ShortDescription": "Snapshot Exports Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of running image export tasks",
+          "MaxValue": 5,
+          "Name": "image_export_limit",
+          "QuotaCollection": "Storage",
+          "ShortDescription": "Image Exports Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of IOPS delivered by provisioned IOPS volumes",
+          "MaxValue": 40000,
+          "Name": "iops_limit",
+          "QuotaCollection": "Storage",
+          "ShortDescription": "Provisioned IOPS Limit",
+          "UsedValue": 1000
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of prefix lists is reached.",
+          "MaxValue": 0,
+          "Name": "prefix_list_limit",
+          "QuotaCollection": "Prefix Lists",
+          "ShortDescription": "Prefix Lists Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of prefix list entries is reached.",
+          "MaxValue": 0,
+          "Name": "prefix_list_entry_limit",
+          "QuotaCollection": "Prefix Lists",
+          "ShortDescription": "Prefix Lists Entry Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of security groups",
+          "MaxValue": 500,
+          "Name": "sg_limit",
+          "QuotaCollection": "Security Groups",
+          "ShortDescription": "Security Groups Limit",
+          "UsedValue": 4
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of rules per VPC security group",
+          "MaxValue": 50,
+          "Name": "vpc_sg_rule_limit",
+          "QuotaCollection": "Security Groups",
+          "ShortDescription": "VPC Security Groups Rules Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of VPC",
+          "MaxValue": 5,
+          "Name": "vpc_limit",
+          "QuotaCollection": "VPC",
+          "ShortDescription": "VPC Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of subnets per VPC",
+          "MaxValue": 200,
+          "Name": "subnet_limit",
+          "QuotaCollection": "VPC",
+          "ShortDescription": "Subnet Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of internet gateways",
+          "MaxValue": 5,
+          "Name": "igw_limit",
+          "QuotaCollection": "VPC",
+          "ShortDescription": "Internet Gateway Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of route tables per VPC",
+          "MaxValue": 25,
+          "Name": "rtb_limit",
+          "QuotaCollection": "VPC",
+          "ShortDescription": "Route Table Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of route rules per route table",
+          "MaxValue": 50,
+          "Name": "rtb_rule_limit",
+          "QuotaCollection": "VPC",
+          "ShortDescription": "Route Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of firewall bypassing VPCs",
+          "MaxValue": 20,
+          "Name": "bypass_vpc_limit",
+          "QuotaCollection": "VPC",
+          "ShortDescription": "Bypass VPC limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of peering connection in pending acceptance",
+          "MaxValue": 25,
+          "Name": "networklink_request_limit",
+          "QuotaCollection": "VPC",
+          "ShortDescription": "Peering requests limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of available peering connections per VPC",
+          "MaxValue": 75,
+          "Name": "networklink_limit",
+          "QuotaCollection": "VPC",
+          "ShortDescription": "Peering connection limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of VPC endpoints",
+          "MaxValue": 20,
+          "Name": "network_endpoint_limit",
+          "QuotaCollection": "VPC",
+          "ShortDescription": "VPC Endpoint Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of NAT gateways",
+          "MaxValue": 5,
+          "Name": "nat_gateway_limit",
+          "QuotaCollection": "VPC",
+          "ShortDescription": "Nat Gateway Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of VPN gateways",
+          "MaxValue": 5,
+          "Name": "vpg_limit",
+          "QuotaCollection": "VPN",
+          "ShortDescription": "VPN Gateway Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of CGW gateways",
+          "MaxValue": 5,
+          "Name": "cgw_limit",
+          "QuotaCollection": "VPN",
+          "ShortDescription": "Customer Gateway Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of VPN connections per VPN gateway",
+          "MaxValue": 5,
+          "Name": "vpnc_limit",
+          "QuotaCollection": "VPN",
+          "ShortDescription": "VPN Connection Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number BGP advertised routes per VPN connection",
+          "MaxValue": 100,
+          "Name": "bgp_route_limit",
+          "QuotaCollection": "VPN",
+          "ShortDescription": "BGP Route Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of static routes per VPN connection",
+          "MaxValue": 100,
+          "Name": "static_route_limit",
+          "QuotaCollection": "VPN",
+          "ShortDescription": "Static Route Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of load balancers per region",
+          "MaxValue": 20,
+          "Name": "lb_limit",
+          "QuotaCollection": "LBU",
+          "ShortDescription": "Load Balancer Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of listeners for load balancers",
+          "MaxValue": 100,
+          "Name": "lb_listeners_limit",
+          "QuotaCollection": "LBU",
+          "ShortDescription": "Load Balancer Listeners Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of listener rules for an account",
+          "MaxValue": 100,
+          "Name": "lb_rules_limit",
+          "QuotaCollection": "LBU",
+          "ShortDescription": "Load Balancer Listener Rules Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of Direct Link connections",
+          "MaxValue": 0,
+          "Name": "dl_connection_limit",
+          "QuotaCollection": "Direct Link",
+          "ShortDescription": "Direct Link Connection Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number Direct Link interfaces per connections",
+          "MaxValue": 50,
+          "Name": "dl_interface_limit",
+          "QuotaCollection": "Direct Link",
+          "ShortDescription": "Direct Link Interface Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of bypass group the user can own",
+          "MaxValue": 1,
+          "Name": "bypass_group_limit",
+          "QuotaCollection": "Other",
+          "ShortDescription": "Bypass Group Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum size of a bypass group",
+          "MaxValue": 6,
+          "Name": "bypass_group_size_limit",
+          "QuotaCollection": "Other",
+          "ShortDescription": "Bypass Group Size Limit",
+          "UsedValue": 0
+        },
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of product types the user can own",
+          "MaxValue": 0,
+          "Name": "pty_limit",
+          "QuotaCollection": "Other",
+          "ShortDescription": "Product Type Limit",
+          "UsedValue": 0
+        }
+      ]
+    },
+    {
+      "QuotaType": "sg-1eb30c74",
+      "Quotas": [
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of rules per security groups",
+          "MaxValue": 50,
+          "Name": "sg_rule_limit",
+          "QuotaCollection": "Security Groups",
+          "ShortDescription": "Security Groups Rules Limit",
+          "UsedValue": 1
+        }
+      ]
+    },
+    {
+      "QuotaType": "sg-742606e6",
+      "Quotas": [
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of rules per security groups",
+          "MaxValue": 50,
+          "Name": "sg_rule_limit",
+          "QuotaCollection": "Security Groups",
+          "ShortDescription": "Security Groups Rules Limit",
+          "UsedValue": 3
+        }
+      ]
+    },
+    {
+      "QuotaType": "sg-0fca547a",
+      "Quotas": [
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of rules per security groups",
+          "MaxValue": 50,
+          "Name": "sg_rule_limit",
+          "QuotaCollection": "Security Groups",
+          "ShortDescription": "Security Groups Rules Limit",
+          "UsedValue": 2
+        }
+      ]
+    },
+    {
+      "QuotaType": "sg-67c4806d",
+      "Quotas": [
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of rules per security groups",
+          "MaxValue": 50,
+          "Name": "sg_rule_limit",
+          "QuotaCollection": "Security Groups",
+          "ShortDescription": "Security Groups Rules Limit",
+          "UsedValue": 3
+        }
+      ]
+    },
+    {
+      "QuotaType": "i-0e17d9bb",
+      "Quotas": [
+        {
+          "AccountId": "249064296596",
+          "Description": "Maximum number of groups assigned to a VM",
+          "MaxValue": 5,
+          "Name": "vm_sg_limit",
+          "QuotaCollection": "Security Groups",
+          "ShortDescription": "VM Security Groups Limit",
+          "UsedValue": 1
+        }
+      ]
+    }
+  ],
+  "ResponseContext": {
+    "RequestId": "940aa02c-6d04-4c0a-80fb-fc28d2943eec"
+  }
+}

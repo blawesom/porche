@@ -1,0 +1,2 @@
+io_uring: io_uring_setup: DENIED (Bad address)
+userns:   userns: ALLOWED (mapped root)

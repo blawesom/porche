@@ -1,0 +1,5 @@
+== leg: hardened ==
+kernel.io_uring_disabled = 2
+user.max_user_namespaces = 0
+kernel.core_pattern = core
+kernel.modules_disabled = 1

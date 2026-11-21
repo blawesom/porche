@@ -1,0 +1,65 @@
+{
+  "ResponseContext": {
+    "RequestId": "4379d914-9fff-431a-ad30-c6331607a4d4"
+  },
+  "Vms": [
+    {
+      "ActionsOnNextBoot": {
+        "SecureBoot": "none"
+      },
+      "Architecture": "x86_64",
+      "BlockDeviceMappings": [
+        {
+          "Bsu": {
+            "DeleteOnVmDeletion": true,
+            "LinkDate": "2026-11-19T15:34:21.405Z",
+            "State": "attaching",
+            "VolumeId": "vol-15d4431d"
+          },
+          "DeviceName": "/dev/sda1"
+        }
+      ],
+      "BootMode": "uefi",
+      "BsuOptimized": false,
+      "CreationDate": "2026-11-19T15:34:21.405Z",
+      "DeletionProtection": false,
+      "Hypervisor": "kvm",
+      "ImageId": "ami-4a4837a3",
+      "LaunchNumber": 0,
+      "NestedVirtualization": false,
+      "Nics": null,
+      "OsFamily": "",
+      "Performance": "highest",
+      "Placement": {
+        "SubregionName": "us-west-1a",
+        "Tenancy": "default"
+      },
+      "PrivateDnsName": "ip-10-8-2-52.us-west-1.compute.internal",
+      "PrivateIp": "10.8.2.52",
+      "ProductCodes": [
+        "0001"
+      ],
+      "ReservationId": "r-fe244ce3",
+      "RootDeviceName": "/dev/sda1",
+      "RootDeviceType": "ebs",
+      "SecurityGroups": [
+        {
+          "SecurityGroupId": "sg-1c964664",
+          "SecurityGroupName": "default"
+        }
+      ],
+      "ShutdownBehaviorConfiguration": {
+        "GuestAction": "stop",
+        "HostAction": "stop"
+      },
+      "State": "pending",
+      "StateReason": "",
+      "Tags": [],
+      "TpmEnabled": false,
+      "UserData": "",
+      "VmId": "i-bfa8d3bc",
+      "VmInitiatedShutdownBehavior": "stop",
+      "VmType": "tinav7.c2r2p1"
+    }
+  ]
+}

@@ -1,0 +1,154 @@
+FCOS node deploy + pending validation — us-west-1, gen-5 @ 1b — 2026-11-20
+==========================================================================
+run-id: 20261120-node-usw1
+note: the scripts in this dir were sanitized pre-commit (2026-11-21):
+the usw1 credentials they carried when run now live only in
+~/.osc/config.json (the repo rule); nothing else changed.
+binaries not committed (digest-pinned, reproducible per the guest/out
+convention): the node bundle's CLH static, guest kernel, initramfs —
+digests recorded in ms5/fixtures.txt; the multipart part-* scratch
+(596 MB, a script bug — parts now go to a temp dir) was deleted.
+context: the full-grid recheck (runs/20261119-redeploy/, 2026-11-20
+addendum) found exactly ONE dedicated stock cell fleet-wide: gen-5,
+us-west-1b, group porche-usw1-g5-1b (ded-d326ad5a). Operator: "build
+it, and run our pending validation."
+
+sequence:
+1. FCOS OMI build for usw1 — infra/images/build-fcos-omi.sh (the
+   dual-region script, first real run; use2 leg SKIPs on the existing
+   ami-c804ee38). Record: runs/<ts>-omi-build/record.txt.
+   First attempt FATALed at CreateMultipartUpload: the script's
+   --raw flag is iaas-api-only and the storage api rejects it —
+   fixed (default JSON output is the usable one), dangling upload
+   aborted, re-run. Lesson recorded in infra/images/README.md.
+   Second attempt uploaded all 31 parts, but the snapshot import
+   (snap-c541c1d7) errored at 0%: CompleteMultipartUpload had
+   returned 0 WITHOUT finalizing the upload (S3-style 200-with-error
+   — completing immediately after the last part; a manual complete
+   30 min later succeeded, ETag 22b9a813...-31). Recovery: manual
+   complete, object verified 2071789568 bytes, dead snapshot deleted,
+   script hardened (post-complete HeadObject assertion +
+   resume-if-object-present). Third run resumes from the object.
+2. SG porche-usw1-sg (sg-6e78844f): SSH tcp/22 + ICMP from office
+   egress 171.33.93.229/32 (egress re-verified live 2026-11-20 —
+   unchanged since 2026-10-19).
+3. deploy-node.sh: CreateVms on ded-d326ad5a @ us-west-1b —
+   tinav5.c8r16p1, NestedVirtualization=true, FCOS OMI + Ignition
+   (core + porche_integ key, doc 13 §4.12), OMI 10 GiB root (no BSM
+   override — validation scope; the MS-5 50 GiB root + 200 GiB region
+   BSU come with the full node recipe, not this validation), then
+   CreatePublicIp + LinkPublicIp.
+4. coverage-test.sh — THE PENDING VALIDATION (the 2026-11-19 "quick
+   coverage test"): (a) /dev/kvm, vmx, kvm_intel nested=Y (doc 13
+   §4.3 pattern, first time on gen-5/Skylake); (b) CLH v54.0 smoke —
+   boot the pinned guest kernel 6.18.57 + busybox initramfs under
+   KVM, serial to file, verdict = guest kernel banner in the log
+   (mirrors porche-clh's VmConfig: kernel+initramfs+console=ttyS0).
+
+== 2026-11-20 18:28-19:00 UTC - FCOS node booted but is INACCESSIBLE;
+host-OS substitution to Flatcar (E-5 fallback) ==
+deploy-node.sh landed the node: i-88b1e2b4 (ami-03d96d21, EIP
+157.250.19.89, running, ping + sshd up) — but SSH rejects our key.
+Console output (ReadConsoleOutput) is definitive:
+  Ignition: fetching configuration for
+  http://169.254.169.254/openstack/latest/user_data: resource not found
+  No SSH authorized keys provided by Ignition or Afterburn
+The VM DOES carry the user-data (ReadVms shows the base64). Root
+cause (verified upstream): Outscale's IMDS is EC2-style
+(/latest/user-data); Ignition only gained an Outscale provider in
+2.28.0 (2026-10-26, ignition#2296) and Afterburn merged Outscale
+support 2026-11-09. FCOS 44 (our pin) AND current stable
+45.20261030.3.1 (meta.json pkgdiff verified: ignition 2.27.0,
+afterburn 5.11.0) predate it — no FCOS build today can consume
+Outscale user-data or keypair injection. The MS-5.M2 "Ignition-via-
+UserData proven" note was evidently never proven ON Outscale; doc 13
+§4.12's workaround targets cloud-init images (Rocky), not Ignition.
+KeypairName would not help either (Afterburn lacks the provider).
+
+DECISION (E-5 fallback, recorded per E-31.1): host OS Flatcar for the
+integration node — the documented fallback, and its Outscale variant
+with patched Ignition 2.28+Afterburn was verified working on Outscale
+by Kenshir0 on 2026-11-12 (flatcar/Flatcar#2334: SSH key, hostname,
+Ignition provisioning all OK). Image: 4881.0.0+nightly-20261111-2100
+(kernel 6.18.58; the ACPI stop regression in .57+ is irrelevant —
+doc 13 §4.13: never stop mid-burst). No upstream signature (nightly
+bincache) — sha256s recorded in import-flatcar-usw1.sh. REVERT
+TRIGGER: FCOS stable ships Ignition >= 2.28 -> rebuild with
+infra/images/build-fcos-omi.sh.
+Import: import-flatcar-usw1.sh (qemu-img verified: virtual size
+13212057600 = SnapshotSize; zlib-compressed clusters; BDM root 13
+GiB). After import: terminate i-88b1e2b4, recreate on ded-d326ad5a
+with the Flatcar OMI + the SAME Ignition user-data (user core +
+porche_integ key — Flatcar's default user is core too).
+
+artifacts: vm-id.txt, eip-id.txt, node-ip.txt, coverage output below.
+
+== MS-5 suite, attempt 1 (2026-11-20 19:0x UTC) — VOID: invocation bugs ==
+All creates/wipes failed from cycle 1 (PERF-1 all-ERR, PERF-8 GATE FAIL
+with 2000 "wedge" events — every create). Root causes, found by manual
+repro against the live agent:
+1. the suite was invoked with the BARE image digest; porche-core's
+   spec validation requires "sha256:<64 hex>" ("invalid spec: image_digest
+   ... must be sha256:<64 hex>").
+2. the platform image dir must be NAMED "sha256:<hex>" — the setup had
+   created images/<bare hex>; renamed on-node + node-setup-flatcar.sh
+   fixed for the record.
+3. (diagnostic note) sudo closes fds > 2 — `create --spec <(...)`
+   through sudo fails with "spec /dev/fd/63: No such file or
+   directory"; the harness runs as root via `sudo bash`, so its
+   process substitutions are unaffected.
+Post-fix manual verification BEFORE the re-run: create OK (guest
+kernel 6.18.57 boots with porche.ip6/porche.cmd cmdline through the
+full path: netns + LUKS + CLH), wipe OK (crypto-erase all green:
+mapper absent, keyfile removed, keyslots erased, region trimmed).
+Attempt-1 artifacts discarded (rm -rf /tmp/ms5 on the node); the
+attempt is recorded here, not counted as a run.
+
+== MS-5 suite, attempt 2 — the recorded run (correct invocation) ==
+ms5-suite.sh sha256:96291392360e3448e6bdf46ce9c702de3e889efad3272dbee4e4419aeb81652a /tmp/ms5
+
+== MS-5 RESULTS — 2026-11-20 19:1x-20:0x UTC — SOFTWARE GATE GREEN ==
+Full record: ms5/results.md (the filled §7.5 template); artifacts:
+ms5/ (perf1/5/8 CSVs + summaries + wedge + fixtures.txt) and
+ms5-delta/{c1,c2,c3}. Summary:
+- PERF-1 (recorded): P50 1449 ms / P99 1524 ms — MS-3 reference 1495/1511
+- PERF-5 (recorded): max per-VM RSS 105,020 kB — MS-3 reference 105 MB
+- PERF-8 (THE GATE): 1,000 cycles, 0 wedge events, drift 0.35 %/0.29 %,
+  agent RSS flat 4,488 kB, teardown P50 368 ms / P99 394 ms — GATE PASS
+- Wipe probes: 1,000/1,000 (embedded, 0 wedges)
+- Escape delta re-run: c1 mechanism-present (tap TSO off vs on) with the
+  outcome-identical note; c2 present (vm.info rng + 2 taps); c3 present
+  (io_uring EPERM vs EFAULT, userns DENIED vs ALLOWED) — node re-sealed
+  and re-asserted after the baseline leg
+- MS-4 c1 CORRECTION recorded: the MS-4 class-1 python verdict compared
+  dicts including the leg label — "outcome differs" was a comparison bug;
+  outcomes were identical then too. The delta evidence is the mechanism.
+- §7.1 fixtures: all pins match MS-1/MS-5 (guest digests identical, CLH
+  v54 pinned, agent 52911db); host OS = Flatcar (the recorded
+  substitution, see results.md header for the revert trigger)
+- PENDING: the operator's sign-off walk of results.md (the milestone
+  completes when walked, doc 07 §8.6).
+
+== RESULT — 2026-11-20 19:00 UTC: NODE DEPLOYED, VALIDATION GREEN ==
+Node: i-520a2bce — Flatcar 4881.0.0+nightly-20261111-2100 (ami-67af010c),
+  tinav5.c8r16p1, NestedVirtualization=true, group tenancy
+  porche-usw1-g5-1b (ded-d326ad5a) @ us-west-1b, EIP 157.250.19.89
+  (reused), SG sg-6e78844f. core@157.250.19.89 with ~/.ssh/porche_integ
+  (Ignition consumed the Outscale user-data — the E-5 fallback works).
+Pending validation (coverage-output.txt):
+  1. nested virt hardware — PASS: vmx on 16/16 CPUs, /dev/kvm present,
+     kvm_intel nested=Y (FIRST gen-5/Skylake verification; kernel
+     6.18.58-flatcar on the host)
+  2. CLH v54.0 guest boot smoke — PASS: the pinned guest kernel 6.18.57
+     booted under KVM ("Hypervisor detected: KVM", kvm-clock active),
+     serial-to-file, banner in log. GUEST-BOOT-OK.
+Node state: LEFT RUNNING (doc 13 §4.13 — never stop mid-burst; the
+dedicated server bills while running — stop decision is the
+operator's). FCOS node i-88b1e2b4 terminated; its EIP reused here.
+Leftover cloud state (PORCHE-owned): groups g7/g6/g5/g4 x both AZs
+(use2 + usw1), FCOS OMI ami-03d96d21 + snapshot (use2: ami-c804ee38,
+new snapshot snap-b007d548 + ami-67af010c in usw1), empty OOS buckets
+porche-use2-ms5 + porche-usw1-images, SG sg-6e78844f, EIP.
+Coverage-test script fixes (recorded): Flatcar /usr/local is
+read-only (run CLH from /tmp); CLH v54 --serial syntax is
+file=path.

@@ -1,0 +1,4 @@
+rx-checksumming: off [fixed]
+tcp-segmentation-offload: on
+	tx-tcp-segmentation: on
+generic-segmentation-offload: on

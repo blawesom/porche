@@ -1,0 +1,6 @@
+hardened VEND count: 4 (console enumeration, weak probe)
+baseline VEND count: 4
+baseline vm.info: rng=1 taps=2 (live mechanism evidence)
+DELTA: present — baseline exposes rng + 2 net ifaces; the hardened
+  agent config emits neither (VmConfig, unit-pinned)
+verdict: the frozen allow-list denies the expanded surface (E-18 delta)

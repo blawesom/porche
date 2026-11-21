@@ -1,0 +1,8 @@
+== PERF-8: 1,000-cycle create/wipe loop (the GATE) ==
+MemAvailable base: 15778320 kB
+cycle 200: MemAvailable=15723256 kB (base 15778320), agent RSS=4488 kB
+cycle 1000: MemAvailable=15732412 kB (base 15778320), agent RSS=4488 kB
+teardown: n=1000 P50=368ms P99=394ms (threshold P99<2000)
+wedge events: 0
+GATE: PASS (no wedge)
+== harness done ==
