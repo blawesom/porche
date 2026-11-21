@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "fail",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "/home/outscale/git/porche/.archify/architecture-porche-readme-20261121-120659/candidate.json",
+    "sha256": "f03e2075c1bf733236af7870fba22632408bbf069614af3f307e0e8238d4582f",
+    "bytes": 7088
+  },
+  "artifact": {
+    "path": "/home/outscale/git/porche/doc/porche-architecture.html",
+    "sha256": "daee0c9822f8f611adb0a65904c2220aad9beddb1159777d9792aabf248fb893",
+    "bytes": 851084
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "fail"
+  },
+  "failedStage": "browser-check",
+  "diagnostics": [
+    {
+      "code": "viewer/browser-check-runtime",
+      "severity": "error",
+      "message": "browser-check could not complete its Chrome inspection.",
+      "subject": {
+        "artifact": "/home/outscale/git/porche/doc/porche-architecture.html"
+      },
+      "evidence": {
+        "reason": "Chrome navigation failed: net::ERR_FILE_NOT_FOUND"
+      },
+      "supportedFixes": [
+        "resolve the reported Chrome inspection error, then rerun browser-check"
+      ]
+    }
+  ],
+  "diagnosticSummary": {
+    "total": 1,
+    "shown": 1,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/home/outscale/git/porche/doc/porche-architecture.finalize.json",
+    "summaryReceipt": "/home/outscale/git/porche/doc/porche-architecture.finalize-summary.json",
+    "browserCheckReceipt": "/home/outscale/git/porche/doc/porche-architecture.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-21T12:07:08.163Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 3059,
+  "browserCheck": {
+    "requested": true,
+    "ran": false
+  }
+}

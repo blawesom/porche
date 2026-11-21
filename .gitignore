@@ -8,3 +8,6 @@ infra/integration/tfplan-links
 /src/target/
 guest/dl/
 guest/out/
+
+# archify working folders (candidates + review evidence; delivered artifacts live in doc/)
+.archify/

@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "browser-check",
+  "evidenceKind": "automated-browser",
+  "status": "fail",
+  "visualReview": "not-requested",
+  "provenance": "current",
+  "deliveryReceiptId": "2be2c5b6-f2ae-4120-8b9c-bd69b19613a6",
+  "artifact": {
+    "path": "/home/outscale/git/porche/doc/porche-architecture.html",
+    "sha256": "daee0c9822f8f611adb0a65904c2220aad9beddb1159777d9792aabf248fb893",
+    "bytes": 851084
+  },
+  "state": {
+    "detail": "read",
+    "motion": "still"
+  },
+  "chrome": {
+    "status": "available",
+    "executable": "/snap/bin/chromium"
+  },
+  "diagnostics": [
+    {
+      "code": "viewer/browser-check-runtime",
+      "severity": "error",
+      "message": "browser-check could not complete its Chrome inspection.",
+      "subject": {
+        "artifact": "/home/outscale/git/porche/doc/porche-architecture.html"
+      },
+      "evidence": {
+        "reason": "Chrome navigation failed: net::ERR_FILE_NOT_FOUND"
+      },
+      "supportedFixes": [
+        "resolve the reported Chrome inspection error, then rerun browser-check"
+      ]
+    }
+  ],
+  "containment": {
+    "status": "fail",
+    "policy": "fit-or-reader-declared-readable-vertical-scroll",
+    "viewports": []
+  },
+  "themeStates": {
+    "status": "fail",
+    "viewports": []
+  },
+  "readability": {
+    "status": "fail",
+    "minimumProjectedNodeTextPx": 6,
+    "viewports": []
+  },
+  "viewerChrome": {
+    "status": "fail",
+    "viewports": []
+  },
+  "captures": {
+    "status": "not-requested",
+    "screenshots": [],
+    "contactSheet": null
+  },
+  "sidecars": {
+    "receipt": "porche-architecture.browser-check.json",
+    "files": []
+  },
+  "error": "Chrome navigation failed: net::ERR_FILE_NOT_FOUND"
+}

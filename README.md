@@ -50,6 +50,15 @@ sections of existing documents, a new corpus file needs an E-register row (doc 0
 
 ## Figures (diagrams)
 
+**[Interactive system view](doc/porche-architecture.html)** — a self-contained
+HTML map of the PoC stack as deployed (operator → console → host-agent →
+microVM, with the trust boundaries and the live 2026-11-21 environment), every
+node evidence-linked to the repo at the pinned commit. Open it in any browser —
+no dependencies, dual light/dark, exports from its own menu. Source:
+`doc/porche-architecture.json`; delivery receipts beside it (validate /
+deliver / check / browser-check all pass). Generated with
+[Archify](https://archify.si/).
+
 Every design/operations doc carries Mermaid figures (`Fig. NN.M`) next to the text they
 illustrate — rendered by GitHub or any IDE preview. Figures are informative: the prose
 stays normative. Entry points for new contributors: **02.1** control planes · **02.2**

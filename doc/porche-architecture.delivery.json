@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "00501445-9f01-440b-9a39-c39644326564",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/home/outscale/git/porche/.archify/architecture-porche-readme-20261121-120659/candidate.json",
+  "output": "/home/outscale/git/porche/doc/porche-architecture.html",
+  "specification": {
+    "sha256": "d5602b739eef291aca6203111b3d165e65e86b48c50b740331737bc952ae7a15",
+    "bytes": 7087
+  },
+  "artifact": {
+    "sha256": "de3348a42e66777ee3d70d57433b3677e6a19f9d38f304972759938e1ea692fa",
+    "bytes": 850875
+  }
+}

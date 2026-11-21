@@ -1,0 +1,312 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "PORCHE — the PoC stack as deployed",
+    "locale": "en",
+    "output": "doc/porche-architecture.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/blawesom/porche.git",
+      "provider": "github",
+      "revision": "cf97ec90cf17159fde11ed516094739b7929373b"
+    }
+  },
+  "components": [
+    {
+      "id": "operator",
+      "type": "external",
+      "label": "Operator",
+      "sublabel": "office · SSH + browser",
+      "pos": [
+        40,
+        250
+      ],
+      "size": [
+        110,
+        60
+      ]
+    },
+    {
+      "id": "edge",
+      "type": "cloud",
+      "label": "Public IP + SG",
+      "sublabel": "porche-usw1-sg · SSH/ICMP /32",
+      "tag": "us-west-1",
+      "pos": [
+        210,
+        250
+      ],
+      "size": [
+        136,
+        62
+      ],
+      "sources": [
+        {
+          "path": "runs/20261120-node-usw1/00-run-record.txt",
+          "line": 133,
+          "end_line": 136,
+          "label": "node + EIP record"
+        }
+      ]
+    },
+    {
+      "id": "console",
+      "type": "backend",
+      "label": "porche-web console",
+      "sublabel": "user /w :18081 · admin /a :18082",
+      "tag": "PoC Stage 1",
+      "pos": [
+        400,
+        250
+      ],
+      "size": [
+        140,
+        62
+      ],
+      "sources": [
+        {
+          "path": "src/crates/porche-web/src/main.rs",
+          "line": 10,
+          "end_line": 14,
+          "label": "two token domains"
+        },
+        {
+          "path": "src/crates/porche-web/src/main.rs",
+          "line": 146,
+          "end_line": 147,
+          "label": "default ports"
+        }
+      ]
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "porche host-agent",
+      "sublabel": "create · stop · wipe (FR-2)",
+      "tag": "host metal",
+      "pos": [
+        720,
+        250
+      ],
+      "size": [
+        136,
+        62
+      ],
+      "sources": [
+        {
+          "path": "src/crates/porche-host/src/main.rs",
+          "line": 44,
+          "end_line": 54,
+          "label": "the four verbs"
+        },
+        {
+          "path": "src/crates/porche-host/src/exec.rs",
+          "line": 252,
+          "end_line": 260,
+          "label": "teardown order"
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "desired-state store",
+      "sublabel": "SQLite · rows + specs",
+      "pos": [
+        700,
+        430
+      ],
+      "size": [
+        130,
+        60
+      ],
+      "sources": [
+        {
+          "path": "src/crates/porche-core/src/store.rs",
+          "line": 98,
+          "label": "SqliteStore"
+        }
+      ]
+    },
+    {
+      "id": "kms",
+      "type": "security",
+      "label": "mock KMS",
+      "sublabel": "keys.json · per-volume DEKs",
+      "tag": "P0 stand-in",
+      "pos": [
+        770,
+        90
+      ],
+      "size": [
+        124,
+        60
+      ],
+      "sources": [
+        {
+          "path": "src/crates/porche-host/src/volume.rs",
+          "line": 14,
+          "end_line": 18,
+          "label": "mock KMS file"
+        }
+      ]
+    },
+    {
+      "id": "clh",
+      "type": "external",
+      "label": "CLH microVM",
+      "sublabel": "workload · one per create",
+      "tag": "untrusted",
+      "pos": [
+        1015,
+        250
+      ],
+      "size": [
+        136,
+        62
+      ],
+      "sources": [
+        {
+          "path": "src/crates/porche-clh/src/client.rs",
+          "line": 5,
+          "label": "one VMM per VM"
+        },
+        {
+          "path": "src/crates/porche-host/src/exec.rs",
+          "line": 211,
+          "end_line": 222,
+          "label": "spawn jailed in netns"
+        }
+      ]
+    },
+    {
+      "id": "vol",
+      "type": "database",
+      "label": "volume regions (LUKS2)",
+      "sublabel": "tier-E · sparse · crypto-erase",
+      "pos": [
+        1020,
+        430
+      ],
+      "size": [
+        140,
+        60
+      ],
+      "sources": [
+        {
+          "path": "src/crates/porche-host/src/volume.rs",
+          "line": 20,
+          "label": "region path"
+        },
+        {
+          "path": "src/crates/porche-host/src/volume.rs",
+          "line": 104,
+          "end_line": 125,
+          "label": "LUKS create/wipe"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Outscale us-west-1 · dedicated group porche-usw1-g5-1b (gen-5, nested virt, Flatcar node)",
+      "wraps": [
+        "edge",
+        "console",
+        "agent",
+        "store",
+        "kms",
+        "clh",
+        "vol"
+      ],
+      "pad": 22
+    },
+    {
+      "kind": "security-group",
+      "label": "per-workload netns · brporche · isolated veth",
+      "wraps": [
+        "clh"
+      ],
+      "pad": 14
+    }
+  ],
+  "connections": [
+    {
+      "from": "operator",
+      "to": "edge",
+      "label": "SSH + HTTP",
+      "variant": "emphasis"
+    },
+    {
+      "from": "edge",
+      "to": "console",
+      "label": "token cookie"
+    },
+    {
+      "from": "console",
+      "to": "agent",
+      "label": "in-process ConsoleApi (Stage 1)",
+      "variant": "emphasis"
+    },
+    {
+      "from": "agent",
+      "to": "clh",
+      "label": "spawn jailed · unix socket",
+      "variant": "emphasis"
+    },
+    {
+      "from": "agent",
+      "to": "store",
+      "label": "rows · specs"
+    },
+    {
+      "from": "agent",
+      "to": "kms",
+      "label": "DEK write / erase",
+      "variant": "security"
+    },
+    {
+      "from": "agent",
+      "to": "vol",
+      "label": "LUKS2 format · crypto-erase",
+      "variant": "security"
+    },
+    {
+      "from": "clh",
+      "to": "vol",
+      "label": "virtio-block /dev/mapper"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "The PoC bet",
+      "items": [
+        "One Cloud Hypervisor microVM per workload, directly orchestrated — no Kata, no containerd",
+        "Dedicated tenancy: one user per physical host; the workload is the reference adversary",
+        "Deterministic teardown: kill → unmap → crypto-erase (FR-3), no residue, no wedge"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Trust boundaries",
+      "items": [
+        "The CLH microVM is drawn External on purpose: untrusted workloads by design (doc 08)",
+        "Per-workload netns with isolated veth on brporche — no workload↔workload L2 (FR-21)",
+        "Tenant visibility enforced in the console adapter: a foreign id reads as 404, never 403",
+        "mock KMS is a P0 stand-in: one root-only keys.json; the real KMS is its own plane"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Live environment (2026-11-21)",
+      "items": [
+        "Node i-520a2bce on the one dedicated stock cell found fleet-wide: gen-5, us-west-1b",
+        "Host OS Flatcar 4881.0.0 (E-5 fallback; FCOS awaits Ignition ≥ 2.28 for Outscale IMDS)",
+        "MS-5 recorded run green: 1,000-cycle create/wipe gate, 0 wedges (runs/20261120-node-usw1)"
+      ]
+    }
+  ]
+}

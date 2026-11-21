@@ -1,0 +1,404 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "fail",
+  "type": "architecture",
+  "quality": "showcase",
+  "startedAt": "2026-11-21T12:07:28.760Z",
+  "specification": {
+    "path": "/home/outscale/git/porche/.archify/architecture-porche-readme-20261121-120659/candidate.json",
+    "sha256": "f03e2075c1bf733236af7870fba22632408bbf069614af3f307e0e8238d4582f",
+    "bytes": 7088
+  },
+  "artifact": {
+    "path": "/home/outscale/git/porche/doc/porche-architecture.html",
+    "sha256": "daee0c9822f8f611adb0a65904c2220aad9beddb1159777d9792aabf248fb893",
+    "bytes": 851084
+  },
+  "stages": {
+    "validate": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": null,
+      "execution": "embedded-in-deliver",
+      "command": [
+        "/usr/bin/node",
+        "/home/outscale/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "architecture",
+        "/home/outscale/git/porche/.archify/architecture-porche-readme-20261121-120659/candidate.json",
+        "/home/outscale/git/porche/doc/porche-architecture.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/home/outscale/git/porche",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": true,
+        "command": "validate",
+        "specification": {
+          "sha256": "f03e2075c1bf733236af7870fba22632408bbf069614af3f307e0e8238d4582f",
+          "bytes": 7088
+        },
+        "validation": {
+          "checksPassed": 9,
+          "checkCount": 9,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        }
+      }
+    },
+    "deliver": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 758,
+      "command": [
+        "/usr/bin/node",
+        "/home/outscale/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "architecture",
+        "/home/outscale/git/porche/.archify/architecture-porche-readme-20261121-120659/candidate.json",
+        "/home/outscale/git/porche/doc/porche-architecture.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/home/outscale/git/porche",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "receiptId": "2be2c5b6-f2ae-4120-8b9c-bd69b19613a6",
+        "ok": true,
+        "command": "deliver",
+        "type": "architecture",
+        "input": "/home/outscale/git/porche/.archify/architecture-porche-readme-20261121-120659/candidate.json",
+        "output": "/home/outscale/git/porche/doc/porche-architecture.html",
+        "specification": {
+          "sha256": "f03e2075c1bf733236af7870fba22632408bbf069614af3f307e0e8238d4582f",
+          "bytes": 7088
+        },
+        "artifact": {
+          "sha256": "daee0c9822f8f611adb0a65904c2220aad9beddb1159777d9792aabf248fb893",
+          "bytes": 851084
+        },
+        "validation": {
+          "checksPassed": 9,
+          "checkCount": 9,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        },
+        "evidence": {
+          "verified": true,
+          "repository": "https://github.com/blawesom/porche",
+          "revision": "cf97ec90cf17159fde11ed516094739b7929373b",
+          "references": 11
+        },
+        "update": {
+          "status": "unavailable",
+          "installedVersion": null,
+          "availableVersion": null,
+          "releaseNotes": null,
+          "checkedAt": null,
+          "source": null,
+          "noticeRequired": false,
+          "noticeText": null,
+          "reason": "disabled"
+        }
+      }
+    },
+    "check": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 354,
+      "command": [
+        "/usr/bin/node",
+        "/home/outscale/.agents/skills/archify/bin/archify.mjs",
+        "check",
+        "/home/outscale/git/porche/doc/porche-architecture.html",
+        "--require-provenance"
+      ],
+      "receipt": {
+        "ok": true,
+        "file": "/home/outscale/git/porche/doc/porche-architecture.html",
+        "artifact": {
+          "sha256": "daee0c9822f8f611adb0a65904c2220aad9beddb1159777d9792aabf248fb893",
+          "bytes": 851084
+        },
+        "checks": [
+          {
+            "name": "single_svg",
+            "ok": true,
+            "details": [
+              "found 1 <svg> block(s)"
+            ]
+          },
+          {
+            "name": "finite_svg",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "orthogonal_arrows",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "label_route_clearance",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "relationship_crossings",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "relationship_corridors",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "container_border_runs",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "route_rhythm",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "legend_clearance",
+            "ok": true,
+            "details": []
+          }
+        ],
+        "composition": {
+          "schemaVersion": 1,
+          "profile": "showcase",
+          "status": "pass",
+          "summary": {
+            "errors": 0,
+            "warnings": 0
+          },
+          "metrics": {
+            "properCrossings": 0,
+            "resolvedCrossovers": 1,
+            "ambiguousCorridors": 0,
+            "arrowheadCollisions": 0,
+            "containerBorderRuns": 0,
+            "labelRouteClearanceIssues": 0,
+            "labelCanvasOverflowIssues": 0,
+            "minLabelRouteClearance": 12.2,
+            "desktopReadabilityIssues": 0,
+            "viewportHeightIssues": 0,
+            "minProjectedNodeTextPx": 6.8,
+            "maxBends": 2,
+            "routesOverSuggestedBends": 0,
+            "maxStretch": 1.25,
+            "routesOverSuggestedStretch": 0,
+            "minSegmentPx": 24,
+            "minInteriorSegmentPx": 144,
+            "shortSegmentCount": 0,
+            "shortEndpointSegmentCount": 0,
+            "shortInteriorSegmentCount": 0,
+            "microSegmentCount": 0
+          },
+          "suggestedLimits": {
+            "bendsPerRelationship": 2,
+            "stretch": 1.35,
+            "segmentPx": 16,
+            "microSegmentPx": 8
+          },
+          "routeReview": {
+            "crossings": [
+              {
+                "left": {
+                  "from": "agent",
+                  "to": "kms",
+                  "label": "DEK write / erase",
+                  "collectionIndex": 5,
+                  "artifactIndex": 6
+                },
+                "right": {
+                  "from": "agent",
+                  "to": "vol",
+                  "label": "LUKS2 format · crypto-erase",
+                  "collectionIndex": 6,
+                  "artifactIndex": 7
+                },
+                "point": [
+                  802,
+                  371
+                ],
+                "sharedNode": "agent"
+              }
+            ],
+            "detours": []
+          },
+          "leadingSpace": {
+            "measured": true,
+            "emptyTopPx": 226,
+            "emptyTopRatio": 0.391,
+            "occupiedTop": 226,
+            "viewBoxTop": 0,
+            "canvasHeight": 578,
+            "typicalNodeHeight": 62,
+            "reviewSuggested": true
+          },
+          "desktopReadability": {
+            "budgetBasis": "recognized-declared-wide",
+            "readerContract": "declared-wide-v1",
+            "availableDiagramWidth": 1241,
+            "actualBudgetPx": 1241,
+            "actualReaderWidth": 1271,
+            "desiredReaderWidth": 1271,
+            "viewportCap": 1376,
+            "limit": "source-size",
+            "requestedTargetPx": 7.5,
+            "requestedTargetMet": false,
+            "hardFloorPx": 6,
+            "hardFloorMet": true,
+            "minimumOwner": {
+              "kind": "node",
+              "id": "console"
+            },
+            "minimumSourceTextPx": 6.8,
+            "minimumProjectedTextPx": 6.8,
+            "semanticTextCount": 26
+          },
+          "issues": []
+        },
+        "provenance": "current",
+        "deliveryReceiptId": "2be2c5b6-f2ae-4120-8b9c-bd69b19613a6"
+      }
+    },
+    "browser-check": {
+      "status": "fail",
+      "exitCode": 1,
+      "durationMs": 1857,
+      "command": [
+        "/usr/bin/node",
+        "/home/outscale/.agents/skills/archify/bin/archify.mjs",
+        "browser-check",
+        "/home/outscale/git/porche/doc/porche-architecture.html",
+        "--json",
+        "--require-provenance"
+      ],
+      "execution": "in-process",
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": false,
+        "command": "browser-check",
+        "evidenceKind": "automated-browser",
+        "status": "fail",
+        "visualReview": "not-requested",
+        "provenance": "current",
+        "deliveryReceiptId": "2be2c5b6-f2ae-4120-8b9c-bd69b19613a6",
+        "artifact": {
+          "path": "/home/outscale/git/porche/doc/porche-architecture.html",
+          "sha256": "daee0c9822f8f611adb0a65904c2220aad9beddb1159777d9792aabf248fb893",
+          "bytes": 851084
+        },
+        "state": {
+          "detail": "read",
+          "motion": "still"
+        },
+        "chrome": {
+          "status": "available",
+          "executable": "/snap/bin/chromium"
+        },
+        "diagnostics": [
+          {
+            "code": "viewer/browser-check-runtime",
+            "severity": "error",
+            "message": "browser-check could not complete its Chrome inspection.",
+            "subject": {
+              "artifact": "/home/outscale/git/porche/doc/porche-architecture.html"
+            },
+            "evidence": {
+              "reason": "Chrome navigation failed: net::ERR_FILE_NOT_FOUND"
+            },
+            "supportedFixes": [
+              "resolve the reported Chrome inspection error, then rerun browser-check"
+            ]
+          }
+        ],
+        "containment": {
+          "status": "fail",
+          "policy": "fit-or-reader-declared-readable-vertical-scroll",
+          "viewports": []
+        },
+        "themeStates": {
+          "status": "fail",
+          "viewports": []
+        },
+        "readability": {
+          "status": "fail",
+          "minimumProjectedNodeTextPx": 6,
+          "viewports": []
+        },
+        "viewerChrome": {
+          "status": "fail",
+          "viewports": []
+        },
+        "captures": {
+          "status": "not-requested",
+          "screenshots": [],
+          "contactSheet": null
+        },
+        "sidecars": {
+          "receipt": "porche-architecture.browser-check.json",
+          "files": []
+        },
+        "error": "Chrome navigation failed: net::ERR_FILE_NOT_FOUND"
+      }
+    }
+  },
+  "browserCheck": {
+    "requested": true,
+    "ran": false
+  },
+  "diagnostics": [
+    {
+      "code": "viewer/browser-check-runtime",
+      "severity": "error",
+      "message": "browser-check could not complete its Chrome inspection.",
+      "subject": {
+        "artifact": "/home/outscale/git/porche/doc/porche-architecture.html"
+      },
+      "evidence": {
+        "reason": "Chrome navigation failed: net::ERR_FILE_NOT_FOUND"
+      },
+      "supportedFixes": [
+        "resolve the reported Chrome inspection error, then rerun browser-check"
+      ]
+    }
+  ],
+  "evidence": {
+    "receipt": "/home/outscale/git/porche/doc/porche-architecture.finalize.json",
+    "summaryReceipt": "/home/outscale/git/porche/doc/porche-architecture.finalize-summary.json",
+    "browserCheckReceipt": "/home/outscale/git/porche/doc/porche-architecture.browser-check.json"
+  },
+  "visualReview": "not-requested",
+  "failedStage": "browser-check",
+  "finishedAt": "2026-11-21T12:07:31.820Z",
+  "durationMs": 3059,
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-21T12:07:08.163Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  }
+}
