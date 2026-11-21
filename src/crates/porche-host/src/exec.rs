@@ -278,6 +278,14 @@ impl Executor for DirectExecutor {
             report.keyslots_erased = self.run(&cmds[1]).is_ok();
             // discard: hole punch → TRIM to the backing device
             report.region_trimmed = self.run(&cmds[2]).is_ok();
+            // region file: unlink after a CLEAN crypto-erase + trim — FR-3
+            // "no residue". [2026-11-21: found by the first sw-suite rollback
+            // execution — wipes since MS-1 left the (erased, non-holed)
+            // region file behind; the MS-3/MS-5 loops accumulated 1000+
+            // husks. On a FAILED erase the file stays for the probe.]
+            if report.keyslots_erased && report.region_trimmed {
+                let _ = std::fs::remove_file(&region);
+            }
         }
 
         // 3. mock-KMS entry removal

@@ -4,7 +4,7 @@
 //! Wipe is **crypto-erase only** (E-6): zeroize the DEK + discard the region — never a
 //! physical overwrite. The DEK destruction is `cryptsetup luksErase` (key slots + LUKS
 //! header gone ⇒ the data encryption key is cryptographically unrecoverable); the
-//! discard is a hole punch (`fallocate --dig`), which on a discard-mounted filesystem
+//! discard is a hole punch (`fallocate -p`), which on a discard-mounted filesystem
 //! TRIMs the freed extents back to the device. Ciphertext bytes may legitimately
 //! remain on the medium — the §7.2 probe checks for *marker material*, not bytes.
 
@@ -122,7 +122,15 @@ pub fn wipe_commands(data_dir: &Path, id: &str) -> Result<Vec<CommandSpec>, Stri
         // key slots + LUKS header destroyed: the DEK is cryptographically gone
         CommandSpec::new(&["cryptsetup", "-q", "luksErase", &region]),
         // hole-punch the extents → discard → TRIM to the backing device
-        CommandSpec::new(&["fallocate", "--dig", "--length", &len.to_string(), &region]),
+        // hole-punch the extents → discard → TRIM to the backing device.
+        // [2026-11-21: was "--dig" — getopt accepts it as a PREFIX of
+        // --dig-holes ("detect ZEROES and replace with holes"), which
+        // no-ops on non-zero data: the LUKS-erased header is random, so
+        // nothing was ever deallocated and every wipe since MS-1 left
+        // the header extents allocated (found by the first sw-suite
+        // rollback execution: du stayed 16 MiB/file). -p punches the
+        // range unconditionally — verified on the node, du 16M → 0.]
+        CommandSpec::new(&["fallocate", "-p", "--length", &len.to_string(), &region]),
     ])
 }
 

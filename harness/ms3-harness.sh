@@ -11,7 +11,12 @@ set -euo pipefail
 IMG=${1:?usage: ms3-harness.sh <image-digest> <run-dir>}
 RD=${2:?usage: ms3-harness.sh <image-digest> <run-dir>}
 mkdir -p "$RD"
-AGENT="/usr/local/bin/porche host-agent --store /var/lib/porche/desired-state.sqlite3 --keys-file /etc/porche/keys.json"
+# Tool root: override with PORCHE_BIN_DIR when the image's /usr/local is
+# read-only (Flatcar: PORCHE_BIN_DIR=/var/lib/porche/bin). Default = the
+# FCOS/Rocky layout. One knob, every harness script (2026-11-21 unification).
+BIN="${PORCHE_BIN_DIR:-/usr/local/bin}"
+AGENT="$BIN/porche host-agent --store /var/lib/porche/desired-state.sqlite3 --keys-file /etc/porche/keys.json"
+export PORCHE_CLH_BIN="$BIN/cloud-hypervisor"
 STORE=/var/lib/porche/desired-state.sqlite3
 
 # T0 = wall clock just before the agent's create is invoked; T1 = the

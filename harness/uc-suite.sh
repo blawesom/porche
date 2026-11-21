@@ -24,7 +24,10 @@ RD=${5:-runs/$(date +%Y%m%d-%H%M%S)-ms6/uc}
 mkdir -p "$RD"
 REPORT="$RD/uc-report.md"
 DATA=/var/lib/porche
-AGENT="/usr/local/bin/porche host-agent --store $DATA/desired-state.sqlite3 --keys-file /etc/porche/keys.json"
+# Tool root: override with PORCHE_BIN_DIR (Flatcar: /var/lib/porche/bin)
+BIN="${PORCHE_BIN_DIR:-/usr/local/bin}"
+AGENT="$BIN/porche host-agent --store $DATA/desired-state.sqlite3 --keys-file /etc/porche/keys.json"
+export PORCHE_CLH_BIN="$BIN/cloud-hypervisor"
 
 fail=0
 CUR=""

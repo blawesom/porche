@@ -14,6 +14,10 @@ set -euo pipefail
 RD=${1:?usage: ms4-sysctl-delta.sh <run-dir> hardened|baseline}
 LEG=${2:?leg: hardened|baseline}
 mkdir -p "$RD"
+# Tool root (harness-standard): a prebuilt STATIC io_uring probe may live
+# here on images without gcc/python3 (Flatcar). Build once on any box:
+#   gcc -static -O2 -o ms4_iouring ms4_iouring.c   # source inlined below
+BIN="${PORCHE_BIN_DIR:-/usr/local/bin}"
 
 # --- leg precondition: state the sysctls actually in force (the toggle proof) ---
 {
@@ -31,7 +35,13 @@ if [ "$LEG" = baseline ]; then
 fi
 
 # --- probe 1: unprivileged io_uring (the 2026 io_uring attack surface) ---
-# a plain io_uring_setup syscall from an unprivileged context
+# a plain io_uring_setup syscall from an unprivileged context.
+# Probe order: prebuilt static probe ($BIN/ms4_iouring or
+# $PORCHE_IOURING_PROBE) — else the gcc/python3 chain below.
+PROBE_BIN="${PORCHE_IOURING_PROBE:-$BIN/ms4_iouring}"
+if [ -x "$PROBE_BIN" ]; then
+  su nobody -s /bin/sh -c "$PROBE_BIN" > "$RD/$LEG.iouring" 2>&1 || true
+else
 cat > /tmp/ms4_iouring.c <<'EOF'
 #include <stdio.h>
 #include <unistd.h>
@@ -60,6 +70,7 @@ else:
 PY
 }
 [ -f /tmp/ms4_iouring ] && su nobody -s /bin/sh -c /tmp/ms4_iouring > "$RD/$LEG.iouring" 2>&1 || true
+fi
 
 # --- probe 2: unprivileged user namespace creation (the userns primitive) ---
 su nobody -s /bin/sh -c 'unshare -Ur echo "userns: ALLOWED (mapped root)"' > "$RD/$LEG.userns" 2>&1 \

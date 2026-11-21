@@ -11,6 +11,8 @@ set -euo pipefail
 RD=${1:?usage: fixtures-capture.sh <run-dir> [host-agent-commit]}
 COMMIT=${2:-${PORCHE_COMMIT:-unknown}}
 mkdir -p "$RD"
+# Tool root: override with PORCHE_BIN_DIR (Flatcar: /var/lib/porche/bin)
+BIN="${PORCHE_BIN_DIR:-/usr/local/bin}"
 
 {
 echo "== PORCHE §7.1 fixture record =="
@@ -22,9 +24,9 @@ echo "uname -r: $(uname -r)"
 command -v rpm-ostree >/dev/null 2>&1 && rpm-ostree status 2>/dev/null | sed -n '1,6p' || true
 echo
 echo "-- CLH --"
-if [ -x /usr/local/bin/cloud-hypervisor ]; then
-  echo "version: $(/usr/local/bin/cloud-hypervisor --version 2>&1 | head -1)"
-  echo "sha256: $(sha256sum /usr/local/bin/cloud-hypervisor | cut -d' ' -f1)"
+if [ -x "$BIN/cloud-hypervisor" ]; then
+  echo "version: $($BIN/cloud-hypervisor --version 2>&1 | head -1)"
+  echo "sha256: $(sha256sum "$BIN/cloud-hypervisor" | cut -d' ' -f1)"
 else
   echo "CLH binary MISSING"
 fi
@@ -39,8 +41,8 @@ done
 echo
 echo "-- host-agent --"
 echo "commit: $COMMIT"
-echo "sha256: $(sha256sum /usr/local/bin/porche | cut -d' ' -f1)"
-echo "porche-web sha256: $(sha256sum /usr/local/bin/porche-web 2>/dev/null | cut -d' ' -f1 || echo missing)"
+echo "sha256: $(sha256sum "$BIN/porche" | cut -d' ' -f1)"
+echo "porche-web sha256: $(sha256sum "$BIN/porche-web" 2>/dev/null | cut -d' ' -f1 || echo missing)"
 echo
 echo "-- hardening state (SEC-11 sysctls, §7.2) --"
 for k in kernel.io_uring_disabled user.max_user_namespaces kernel.core_pattern kernel.modules_disabled; do

@@ -1,0 +1,103 @@
+Harness unification + wipe-path defect fixes — 2026-11-21
+==========================================================
+run-id: 20261121-harness-unify
+context: operator review of plan/spec/implementation/test asked for
+improvements without added complexity. Implemented propositions 1-4
+(the review's list, runs recorded here); proposition 5+ (setup-variant
+merge) and 6-7 (Runner enum, reboot persistence) remain.
+
+== 1. harness path unification (proposition 1) ==
+Every harness script now derives its tool root from one knob:
+  BIN="${PORCHE_BIN_DIR:-/usr/local/bin}"
+  AGENT="$BIN/porche host-agent --store ... --keys-file ..."
+  export PORCHE_CLH_BIN="$BIN/cloud-hypervisor"
+Scripts updated: ms3-harness, sw-suite, uc-suite, ms4-{offload,device,
+sysctl}-delta, fixtures-capture. Effect: the MS-6 suites run UNMODIFIED
+on any host OS — on the Flatcar node (read-only /usr/local) via
+PORCHE_BIN_DIR=/var/lib/porche/bin; the per-OS script copies that MS-5
+required (ms5-suite.sh, ms5-*-delta.sh, fixtures-flatcar.sh — kept as
+that run's historical artifacts) are no longer needed for future runs.
+
+== 2. python3 removed from harness analyses (proposition 2) ==
+ms4-offload-delta + ms4-device-delta verdict blocks ported to shell
+(bash+grep+wc). The harness is now bash+awk+stdio only — no gcc,
+no python3 anywhere in the analysis path.
+
+== 3. MS-4 class-1 comparison bug fixed upstream (proposition 3) ==
+The python verdict compared dicts that included the leg 'label', so
+"DELTA: present — outcome differs" was structurally ALWAYS printed
+(the MS-4 c1 outcome rows were identical). The shell port compares
+the outcome tuple only; the correct verdict text now prints
+("none — same outcome ... version floor only, SEC-31 note") with the
+mechanism evidence (tap offload state) named explicitly.
+
+== 4. MS-4 class-2 weak probe replaced (proposition 4) ==
+The console-enumeration regex (0x.... 0x.... on one line) matched
+nothing on either leg — sysfs cat renders as separate lines — a
+silent non-probe. Verdict basis is now BOTH sides' live vm.info:
+the hardened side captured from the agent's own socket
+(/var/lib/porche/run/<id>.sock), the baseline from the hand-driven
+VMM. rng presence + net iface count are the stable signals.
+
+ms4-sysctl-delta: static-probe fast path added ($BIN/ms4_iouring or
+PORCHE_IOURING_PROBE, build: gcc -static) ahead of the gcc/python3
+chain — images without either (Flatcar) now have a path.
+
+== 5. TWO IMPLEMENTATION DEFECTS FOUND AND FIXED (the sw-suite's
+first-ever execution — MS-6 gate doing its job) ==
+Validation: unified sw-suite smoke on the held node
+(PORCHE_BIN_DIR=/var/lib/porche/bin, SW_LOOP_CYCLES=5,
+SW_ROLLBACK_CYCLES=3, SW_RECREATE_CYCLES=3, SW_CONCURRENCY=5).
+
+First run: rollback cleanliness FAILED (volume region residue, all
+cycles). Diagnosis chain (all verified live on the node):
+
+  a) fallocate --dig IS NOT a punch-hole. util-linux getopt accepts
+     "--dig" as an unambiguous PREFIX of --dig-holes ("detect ZEROES
+     and replace with holes") — and the LUKS-erased header is RANDOM
+     data, so nothing was ever zero: the punch NO-OPED since MS-1.
+     Every "region_trimmed: true" in every wipe report since MS-1 was
+     the exit code of a no-op. Empirical proof on the node:
+     16 MiB random file → fallocate --dig --length N → du unchanged
+     (16M); fallocate -p --length N → du 0.
+     FIX (volume.rs): -p (punch-hole). The E-6 SECURITY claim
+     (crypto-erase: keyslots + header destroyed) was NEVER affected —
+     only the discard/space-reclaim step silently never ran.
+  b) teardown never unlinked the region file. Wipes left the (erased,
+     non-holed) region file behind — the MS-3/MS-5 1,000-cycle loops
+     accumulated 1,010 husks / 16 GB on the node (measured; the
+     retained extents are exactly the LUKS header area, ~16.5 MiB/file
+     — consistent with (a)).
+     FIX (exec.rs): after a CLEAN crypto-erase + trim, unlink the
+     region file (FR-3 "no residue"); on a failed erase the file
+     stays for the probe.
+
+Post-fix validation (agent rebuilt — unit tests 41/41 green, sha256
+2b77b6a1802a1e9fe4f34ebf72f67ab123befbf737a4a50465f2c92b71dffff3,
+redeployed to /var/lib/porche/bin/porche; husks removed): the same
+smoke — ALL GATES PASS (loop/drift/wipe-probes/rollback/idempotency/
+concurrency), and the volumes dir ends at 0 files / 36K.
+
+== record corrections (for the historical runs — not edited, per the
+records-are-immutable rule) ==
+- MS-3 (20261020-MS3) and MS-5 (20261120-node-usw1) "region trimmed"
+  wipe-report fields and the §7.5.2 "Wipe (TRIM physical claim)"
+  recorded rows were VACUOUS-TRUE (the dig no-op): the discard
+  evidence in both runs is void. The crypto-erase rows (keyslots
+  erased, region clean, DEK gone) stand. The hardware run must
+  re-establish the TRIM claim with the fixed punch (fallocate -p) —
+  and its probe should assert du-drop, not exit code.
+- MS-4 c1 verdict-text bug (see item 3) — the outcome-differs line
+  was spurious; mechanism evidence stands.
+
+== agent digest note ==
+The node's /var/lib/porche/bin/porche is now 2b77b6a1... (the fix
+build, repo dirty on 52911db); the MS-5 record's fixtures (0cdada9f)
+remain the historical truth for that run. The MS-6 recorded run
+should rebuild from the committed tree and pin its own digest.
+
+== artifacts ==
+- harness diffs: the 7 scripts above
+- src diffs: volume.rs (the -p fix + comment), exec.rs (region unlink)
+- smoke outputs: this record's text; the node's /tmp/ms6-smoke (both
+  the failing first run and the passing second — kept on-node)

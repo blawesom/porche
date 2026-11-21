@@ -9,7 +9,10 @@ set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run on node 1 as root"; exit 1; }
 RD=${1:?usage: ms4-offload-delta.sh <run-dir>}
 mkdir -p "$RD"
-AGENT="/usr/local/bin/porche host-agent --store /var/lib/porche/desired-state.sqlite3 --keys-file /etc/porche/keys.json"
+# Tool root: override with PORCHE_BIN_DIR (Flatcar: /var/lib/porche/bin)
+BIN="${PORCHE_BIN_DIR:-/usr/local/bin}"
+AGENT="$BIN/porche host-agent --store /var/lib/porche/desired-state.sqlite3 --keys-file /etc/porche/keys.json"
+export PORCHE_CLH_BIN="$BIN/cloud-hypervisor"
 IMG=$(ls /var/lib/porche/images/ | head -1)
 
 run_case() {
@@ -47,24 +50,29 @@ run_case hardened hs1 0
 echo "== baseline (offloads on) ==" | tee -a "$RD/verdict.txt"
 run_case baseline bs1 1
 
-# delta analysis
-python3 - "$RD" <<'EOF' | tee -a "$RD/verdict.txt"
-import re, sys, pathlib
-rd = pathlib.Path(sys.argv[1])
-def probe(label):
-    log = (rd / f"{label}.console").read_text(errors="replace") if (rd / f"{label}.console").exists() else ""
-    done = "OFFLOAD-STRESS-DONE" in log
-    panic = bool(re.search(r"panic|Oops|BUG:", log, re.I))
-    ping_ok = log.count("packet loss") > 0
-    wipe_ok = (rd / f"{label}.wipe").exists() and "WIPE-FAIL" not in (rd / f"{label}.wipe").read_text()
-    return dict(label=label, stress_completed=done, kernel_panic=panic, network_up=ping_ok, wipe_ok=wipe_ok)
-h = probe("hardened"); b = probe("baseline")
-print(f"hardened: {h}")
-print(f"baseline: {b}")
-if h == b:
-    print("DELTA: none — same outcome both sides (version floor only, SEC-31 note)")
-else:
-    print("DELTA: present — outcome differs between hardened and baseline")
-    print("verdict: delta demonstrated (E-18; no absolute-security claim)")
-EOF
+# ---- delta analysis (shell — no python3 dependency; 2026-11-21 fix: the
+# python predecessor compared dicts that included the leg LABEL, so
+# "DELTA: present" was structurally always printed — the MS-4 c1 verdict
+# bug. Compare the outcome tuple only; the mechanism evidence is the tap
+# offload state in {hardened,baseline}.tap-offloads) ----
+leg_summary() {
+  local label=$1 done_ok=no panic=no netup=no wipe_ok=no c
+  grep -q 'OFFLOAD-STRESS-DONE' "$RD/$label.console" 2>/dev/null && done_ok=yes
+  grep -qiE 'panic|Oops|BUG:' "$RD/$label.console" 2>/dev/null && panic=yes
+  c=$(grep -c 'packet loss' "$RD/$label.console" 2>/dev/null || true); [ "${c:-0}" -gt 0 ] 2>/dev/null && netup=yes
+  [ -f "$RD/$label.wipe" ] && ! grep -q WIPE-FAIL "$RD/$label.wipe" && wipe_ok=yes
+  echo "stress_completed=$done_ok kernel_panic=$panic network_up=$netup wipe_ok=$wipe_ok"
+}
+H=$(leg_summary hardened); B=$(leg_summary baseline)
+{
+  echo "hardened: $H"
+  echo "baseline: $B"
+  if [ "$H" = "$B" ]; then
+    echo "DELTA: none — same outcome both sides (version floor only, SEC-31 note)"
+    echo "mechanism evidence: tap offload state, $RD/{hardened,baseline}.tap-offloads"
+  else
+    echo "DELTA: present — outcome differs between hardened and baseline"
+    echo "verdict: delta demonstrated (E-18; no absolute-security claim)"
+  fi
+} | tee -a "$RD/verdict.txt"
 echo done

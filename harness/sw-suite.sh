@@ -20,7 +20,10 @@ IMG=${1:?usage: sw-suite.sh <image-digest> <run-dir>}
 RD=${2:?usage: sw-suite.sh <image-digest> <run-dir>}
 mkdir -p "$RD"
 DATA=/var/lib/porche
-AGENT="/usr/local/bin/porche host-agent --store $DATA/desired-state.sqlite3 --keys-file /etc/porche/keys.json"
+# Tool root: override with PORCHE_BIN_DIR (Flatcar: /var/lib/porche/bin)
+BIN="${PORCHE_BIN_DIR:-/usr/local/bin}"
+AGENT="$BIN/porche host-agent --store $DATA/desired-state.sqlite3 --keys-file /etc/porche/keys.json"
+export PORCHE_CLH_BIN="$BIN/cloud-hypervisor"
 
 fail=0
 step() { printf 'sw: %-32s ' "$1"; }
@@ -102,7 +105,7 @@ for i in $(seq 1 "$RB_N"); do
   [ -e "$DATA/volumes/$id.img" ] && failmsg "cycle $i: volume region residue"
   $AGENT wipe "$id" >/dev/null 2>&1 || true   # clear the Failed row
 done
-pass # individual failures already flagged
+# per-cycle failures flagged inline; the exit code carries the gate verdict
 
 # --- gate 3: re-create idempotency --------------------------------------------
 # create → wipe → same id again. Every cycle must converge; the netns-veth
@@ -120,7 +123,7 @@ for i in $(seq 1 "$RC_N"); do
   done
 done
 grep -q 'File exists' "$RD/sw-recreate.log" 2>/dev/null && failmsg "RTNETLINK 'File exists' in recreate log"
-pass
+# per-cycle failures flagged inline; the exit code carries the gate verdict
 
 # --- gate 4: concurrency smoke -----------------------------------------------
 # Parallel creates + concurrent reads: verdict = 0 errors, 0 lock timeouts.
