@@ -1,0 +1,8 @@
+FCOS OMI build — 2026-11-20T18:26:11Z
+pin: FCOS stable 44.20260913.3.2 (openstack), image porche-fcos-44.20260913.3.2
+profiles: use2 usw1 (in scope: use2 usw1)
+dryrun: 1
+work: /tmp/opencode/fcos-omi
+use2 SKIP ami-c804ee38 (available image of the pinned name exists)
+usw1 OK DRYRUN-SNAP DRYRUN-IMAGE
+done (fail=0)

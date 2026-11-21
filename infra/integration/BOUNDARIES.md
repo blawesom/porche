@@ -5,6 +5,26 @@ IaC was applied. **This account is shared: most of it is NOT PORCHE's.**
 Regenerate with `make inventory` before any change that alters resource
 boundaries, and update this file in the same commit.
 
+## Profile scope (operator-decided)
+
+- **2026-11-19: `usw1` (us-west-1) is IN SCOPE** — same account
+  (`249064296596`), credentials stored as the `usw1` profile in
+  `~/.osc/config.json`. Region verified empty (0 VMs);
+  `dedicated_server_limit` = 0 there (a quota grant is required before
+  any dedicated placement; see `runs/20261119-redeploy/`).
+- `use2` (us-east-2) — in scope (the integration environment, this
+  directory).
+- **`euw2` (eu-west-2) and every other profile remain OUT OF SCOPE** —
+  never referenced by any command of this project.
+- This directory's Makefile stays pinned to `use2` (it manages the
+  use2 environment); `usw1` work is done with explicit
+  `--profile usw1` calls, recorded per run.
+- **Image build is dual-region**: `infra/images/build-fcos-omi.sh`
+  imports the pinned FCOS OMI into every in-scope profile (default
+  `use2` + `usw1`, out-of-scope profiles refused fail-closed). The
+  use2 OMI exists (`ami-c804ee38`); the usw1 import is pending its
+  first run — its OMI ID lands here when built.
+
 Refreshed 2026-10-18 (evening) with `make inventory` (octl, sandbox
 profile) after the partial apply and the out-of-band termination of
 metal node 2 — see the managed-resources section below.

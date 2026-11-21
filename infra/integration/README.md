@@ -19,13 +19,15 @@ The Outscale account is **shared**. This configuration therefore:
 - **targets the `use2` tenant — a NEW cloud tenant on a new region
   (2026-10-23; doc 13 §4.10: the old `sandbox` tenant's pinned resources are
   historical and do not exist there — the environment is provisioned
-  fresh) and uses only its profile**: the `use2` profile of
-  `~/.osc/config.json` is the only permitted one; other profiles that
-  may exist in that file (e.g. `perso`) are never referenced. The
-  Makefile hard-pins `OSC_PROFILE`, every `octl` call passes an
-  explicit `--profile use2` (an explicit profile overrides stray
+  fresh)**: this directory manages only the use2 environment.
+  In-scope profiles (operator-decided, 2026-11-19): **`use2`
+  (us-east-2) and `usw1` (us-west-1)** — same account, `usw1` used
+  with explicit `--profile usw1` calls outside this directory.
+  **`euw2` (eu-west-2) and every other profile remain out of
+  scope.** The Makefile hard-pins `OSC_PROFILE`, every `octl` call
+  passes an explicit `--profile` (an explicit profile overrides stray
   `OSC_*` env vars), and `make guard` fail-closes the mutating
-  targets on anything else.
+  targets on anything but the pinned one.
 - **manages only net-new resources** (node 2, BSUs, NFS VM, CP VM, new
   SGs). Existing resources — node 1, the management SG, the keypair,
   the dedicated group — appear only as **variable values**; the

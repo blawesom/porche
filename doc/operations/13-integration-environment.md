@@ -159,6 +159,35 @@ Region `eu-west-2`; subregion `eu-west-2a`. Credentials: local `~/.osc/config.js
     same pinned FCOS build — record: `runs/20261023-use2-tenant/ms5/`; the
     octl/OOS multipart mechanics and credential-export lessons are in that
     record).
+    **Addendum (2026-11-19, profile scope)**: `usw1` (us-west-1) is in
+    scope — same account `249064296596`, empty region, subregions
+    `us-west-1a`/`1b`, `dedicated_server_limit` = 0 (quota grant needed
+    before dedicated placement; `runs/20261119-redeploy/`). `euw2`
+    (eu-west-2) and all other profiles remain out of scope. **The image
+    build targets every in-scope region from now on**
+    (`infra/images/build-fcos-omi.sh`, defaults to `use2` + `usw1`):
+    OMIs are region-scoped and the use2 OMI does not exist in us-west-1
+    — each region gets its own import of the same pinned build, recorded
+    per run under `runs/<ts>-omi-build/`.
+    **Addendum (2026-11-20, dedicated node landed in usw1)**: dedicated
+    stock exists ONLY at gen-5/us-west-1b (full-grid recheck,
+    `runs/20261119-redeploy/`); the node runs there
+    (`runs/20261120-node-usw1/`). Mechanics learned: (1) FCOS cannot
+    consume Outscale user-data or keypair injection — Outscale's IMDS
+    is EC2-style, Ignition's Outscale provider only exists from 2.28.0
+    (2026-10-26) and Afterburn's from 2026-11-09, while FCOS stable
+    45.20261030.3.1 ships ignition 2.27.0/afterburn 5.11.0 — §4.12's
+    UserData workaround applies to cloud-init images only, and the
+    MS-5.M2 "Ignition-via-UserData proven" note was never proven ON
+    Outscale; (2) the node host OS is therefore **Flatcar** (E-5
+    fallback, image `porche-flatcar-4881.0.0-nightly20261111`
+    `ami-67af010c`, imported via the same OOS multipart→snapshot→OMI
+    path) — revert to FCOS when it ships Ignition ≥ 2.28; (3) the §4.3
+    nested-virt claim extends to gen-5/Skylake: vmx + `/dev/kvm` +
+    `kvm_intel nested=Y` verified, CLH v54.0 boots the pinned guest
+    kernel under KVM (first gen-5 verification); (4) Flatcar's
+    `/usr/local` is read-only (unlike FCOS) — run CLH from `/tmp`;
+    CLH v54 CLI: `--serial file=<path>`.
 11. **Nets are IPv4-only**: a Net's CIDR must be RFC1918 (/16–/28), public IPs are v4
     (`CreatePublicIp`/`LinkPublicIp`), and there is no v6 Net option. Consequence
     (E-22/E-25): cross-host workload v6 rides a **v6-in-v4 tunnel** here — a transport
@@ -266,7 +295,9 @@ bridge, platform image + specs under `/root/poc/`, host-agent at
 - [ ] FCOS derivative OMI (import qcow2 → OMI; Ignition via user-data — verify metadata
       compatibility; fallback: bake config into the OMI). Unblocks the **E-5 PoC host
       base** (doc 07 §2/§7.1 — the recorded PoC run lands here) and action 13's
-      production image.
+      production image. *2026-11-19: the import is scripted and dual-region
+      (`infra/images/build-fcos-omi.sh` — targets every in-scope region; the use2
+      OMI `ami-c804ee38` exists, the usw1 import is pending its first run).*
 - [ ] SG set for host↔control-plane and host↔shard flows (gRPC, NFS, migration TLS port).
 - [ ] Net-tenancy question: verify whether a dedicated-group Net can host default-tenancy
       VMs (if yes, migrate topology off public mode for cleaner segmentation).
